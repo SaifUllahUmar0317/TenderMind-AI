@@ -176,6 +176,7 @@ def compress_pdf(input_path: str, output_path: str, mode: str = "recommended") -
                 doc.xref_set_key(xref, "ColorSpace", "/DeviceRGB")
                 doc.xref_set_key(xref, "BitsPerComponent", "8")
                 doc.xref_set_key(xref, "DecodeParms", "null")
+                doc.xref_set_key(xref, "Metadata", "null")
                 doc.xref_set_key(xref, "Mask", "null")
                 
                 # Update soft mask stream & dictionary
@@ -186,6 +187,7 @@ def compress_pdf(input_path: str, output_path: str, mode: str = "recommended") -
                 doc.xref_set_key(smask, "ColorSpace", "/DeviceGray")
                 doc.xref_set_key(smask, "BitsPerComponent", "8")
                 doc.xref_set_key(smask, "DecodeParms", "null")
+                doc.xref_set_key(smask, "Metadata", "null")
             else:
                 # Handle standard opaque images (RGB, CMYK, Grayscale, etc.)
                 pix = fitz.Pixmap(doc, xref)
@@ -218,6 +220,7 @@ def compress_pdf(input_path: str, output_path: str, mode: str = "recommended") -
                     doc.xref_set_key(xref, "ColorSpace", "/DeviceGray" if is_gray else "/DeviceRGB")
                     doc.xref_set_key(xref, "BitsPerComponent", "8")
                     doc.xref_set_key(xref, "DecodeParms", "null")
+                    doc.xref_set_key(xref, "Metadata", "null")
                     doc.xref_set_key(xref, "SMask", "null")
                     doc.xref_set_key(xref, "Mask", "null")
         except Exception:
