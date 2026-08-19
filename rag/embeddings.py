@@ -15,6 +15,8 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
+import threading
+
 try:
     import torch
     # Use balanced threads for fast CPU tensor encoding
@@ -26,10 +28,12 @@ class EmbeddingGenerator:
     """
     High-speed embedding generator wrapping free, open-source SentenceTransformer ('all-MiniLM-L6-v2').
     Includes fallback feature-hashing vector encoder if PyTorch page file memory is constrained.
+    Thread-safe singleton prevents race conditions during startup or concurrent requests.
     """
 
     _model = None
     _use_fallback = False
+    _lock = threading.Lock()
 
     @classmethod
     def get_model(cls):
@@ -37,13 +41,15 @@ class EmbeddingGenerator:
             return None
 
         if cls._model is None:
-            try:
-                from sentence_transformers import SentenceTransformer
-                cls._model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
-            except Exception as e:
-                # Fallback to feature hashing encoder on memory-constrained Windows page file limit
-                cls._use_fallback = True
-                return None
+            with cls._lock:
+                if cls._model is None and not cls._use_fallback:
+                    try:
+                        from sentence_transformers import SentenceTransformer
+                        cls._model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
+                    except Exception as e:
+                        # Fallback to feature hashing encoder on memory-constrained Windows page file limit
+                        cls._use_fallback = True
+                        return None
         return cls._model
 
     @classmethod
