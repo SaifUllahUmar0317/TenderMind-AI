@@ -29,9 +29,6 @@ Users can upload any government or corporate tender document (PDF), and TenderMi
 ### AI Tender Assistant
 ![Tender Assistant](images/tender-assistant.png)
 
-### Equipment & Specifications Extraction
-![Equipment Extraction](images/equipment-extraction.png)
-
 ### PDF Compressor
 ![PDF Compressor](images/pdf-compressor.png)
 
@@ -41,14 +38,8 @@ Users can upload any government or corporate tender document (PDF), and TenderMi
 ### Deadline Reminder System
 ![Deadline Reminder](images/deadline-reminder.png)
 
-### Recent Sessions Sidebar
-![Recent Sessions](images/recent-sessions.png)
-
 ### Dark Mode
 ![Dark Mode](images/dark-mode.png)
-
-### Light Mode
-![Light Mode](images/light-mode.png)
 
 ---
 
