@@ -491,7 +491,6 @@ sudo apt-get install python3-pip tesseract-ocr tesseract-ocr-eng libgl1-mesa-glx
 - `deadline` — Extract submission deadline, bid opening date
 - `bid_security` — Extract earnest money / call deposit / bid security amount
 - `equipment_specs` — Extract equipment schedule, quantities, and technical specifications
-- `equipment_links` — Generate product search links for all equipment items
 
 ### PDF Compressor
 
@@ -539,7 +538,6 @@ Use the **chat input** at the bottom of the workspace, or click any **Quick Quer
 - "What is the tender deadline for this tender?"
 - "What is the earnest money, call deposit or bid security?"
 - "Extract Equipment Schedule & Specifications"
-- "Official Links for all Equipments"
 
 ### Switching Between Documents
 

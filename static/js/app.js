@@ -535,9 +535,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <button class="quick-prompt-item" onclick="sendQuickQuery('List all equipment items, quantities, and technical specifications.', 'equipment_specs')">
                                         ➔ Extract Equipment Schedule &amp; Specifications
                                     </button>
-                                    <button class="quick-prompt-item" onclick="sendQuickQuery('Give me the official links for all the equipments in this tender document.', 'equipment_links')">
-                                        ➔ Official Links for all Equipments
-                                    </button>
                                 </div>
                             </div>
                         `;
@@ -563,9 +560,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                 </button>
                                 <button class="quick-prompt-item" onclick="sendQuickQuery('List all equipment items, quantities, and technical specifications.', 'equipment_specs')">
                                     ➔ Extract Equipment Schedule &amp; Specifications
-                                </button>
-                                <button class="quick-prompt-item" onclick="sendQuickQuery('Give me the official links for all the equipments in this tender document.', 'equipment_links')">
-                                    ➔ Official Links for all Equipments
                                 </button>
                             </div>
                         </div>
