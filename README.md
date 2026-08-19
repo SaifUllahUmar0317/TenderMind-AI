@@ -1,4 +1,4 @@
-﻿# TenderMind — AI Tender Management & Document Intelligence Platform
+# TenderMind — AI Tender Management & Document Intelligence Platform
 
 > A professional, production-grade web application for AI-powered tender document analysis, intelligent Q&A, equipment extraction, PDF tools, and automated deadline management.
 
@@ -186,7 +186,7 @@ Flask Web Application (app.py)
 | **Frontend** | HTML5, CSS3 (custom design system), Vanilla JavaScript ES6+ |
 | **PDF Viewer** | PDF.js (Mozilla, CDN) |
 | **Icons** | Lucide Icons (CDN) |
-| **Deployment** | Replit, any Python WSGI host |
+| **Deployment** | Any Python WSGI host (Railway, Render, VPS, local) |
 
 ---
 
@@ -201,8 +201,6 @@ TenderMind/
 ├── .env.example                    # Environment variables template
 ├── .env                            # Your local configuration (DO NOT COMMIT)
 ├── .gitignore                      # Git exclusion rules
-├── .replit                         # Replit deployment configuration
-├── replit.nix                      # Nix system packages for Replit
 ├── README.md                       # This file
 │
 ├── templates/
@@ -386,12 +384,15 @@ gunicorn -w 2 -b 0.0.0.0:5000 --timeout 300 app:app
 
 ## Free Deployment Options
 
-### Option 1: Replit ⭐ (Easiest)
-The project includes `.replit` and `replit.nix` configuration files for one-click Replit deployment.
+### Option 1: Replit (Free)
+Replit can host this project with some manual setup:
 
 1. Import the repository into [replit.com](https://replit.com)
-2. Add your `GROQ_API_KEY` in Replit Secrets (not environment variables)
-3. Click **Run**
+2. In the Replit Shell, run: `pip install -r requirements.txt`
+3. Install Tesseract: in **replit.nix** add `pkgs.tesseract` and `pkgs.poppler_utils` under `deps`, or use the Packages tab
+4. Add your `GROQ_API_KEY` in **Replit Secrets**
+5. Set the **Run** command to: `python app.py`
+6. Click **Run**
 
 > **Limitations**: Free Replit instances have limited RAM (~512 MB) and sleep after inactivity. The embedding model (~80 MB) plus FAISS indices may strain memory on very large documents.
 
