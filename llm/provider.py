@@ -445,61 +445,163 @@ class LLMProvider:
         # 1. Summary intent
         if qtype == "TENDER_SUMMARY":
             doc_name = summary_data.get("filename", "this tender document").replace(".pdf", "") if summary_data else "this tender document"
-            overview = f"This tender document outlines the requirements and procurement guidelines for **{doc_name}**."
+            doc_id = summary_data.get("doc_id", "") if summary_data else ""
 
-            details = []
-            # Extract from metadata_kv if available
-            kv_map = {}
-            if summary_data and summary_data.get("metadata_kv"):
-                for kv in summary_data["metadata_kv"]:
-                    kv_map[kv.get("key", "").lower()] = kv
+            # --- Pull stored deadline data if available ---
+            submission_deadline_str = ""
+            opening_datetime_str = ""
+            tender_title = ""
+            organization = ""
+            try:
+                from deadlines.database import DeadlineDatabase
+                if doc_id:
+                    stored = DeadlineDatabase.get_tender_deadline(doc_id)
+                    if stored:
+                        sub_iso = stored.get("submission_deadline", "")
+                        op_iso = stored.get("opening_datetime", "")
+                        tender_title = stored.get("tender_title", "")
+                        organization = stored.get("organization", "")
+                        if sub_iso:
+                            from datetime import datetime
+                            try:
+                                dt = datetime.fromisoformat(sub_iso)
+                                submission_deadline_str = dt.strftime("%B %d, %Y at %I:%M %p")
+                            except Exception:
+                                submission_deadline_str = sub_iso
+                        if op_iso:
+                            try:
+                                dt = datetime.fromisoformat(op_iso)
+                                opening_datetime_str = dt.strftime("%B %d, %Y at %I:%M %p")
+                            except Exception:
+                                opening_datetime_str = op_iso
+            except Exception:
+                pass
 
-            # Search chunks for details
+            # --- Extract from retrieved chunks if not in DB ---
             all_text = " ".join([c.get("text", "") for c in retrieved_chunks])
 
-            # Deadline
-            dl_match = re.search(r'(?:submission|deadline|last date)[^.\n]{0,60}(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{1,2}\s+[A-Za-z]+\s+\d{2,4})[^\n.]{0,40}', all_text, re.I)
-            if dl_match:
-                p = retrieved_chunks[0].get("page_start", 1) if retrieved_chunks else 1
-                details.append(f"- **Tender submission deadline:** **{dl_match.group(0).strip()}** *(Source: Page {p})*")
-            else:
-                details.append("- **Tender submission deadline:** Not specified in the retrieved document.")
+            if not submission_deadline_str:
+                dl_match = re.search(
+                    r'(?:reach|submitted?|submission|deadline|last\s+date|closing\s+date|close\s+of\s+office)[^\n]{0,80}?'
+                    r'(\d{1,2}[/\-. ]\d{1,2}[/\-. ]\d{2,4}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4})',
+                    all_text, re.IGNORECASE
+                )
+                if dl_match:
+                    submission_deadline_str = dl_match.group(1).strip()
 
-            # Bid Security
-            bs_match = re.search(r'(?:earnest money|bid security|call deposit|cdr)[^.\n]{0,60}(\d+%\s*(?:of\s+the\s+bid)?|rs\.?\s*[\d,]+)[^\n.]{0,40}', all_text, re.I)
-            if bs_match:
-                p = retrieved_chunks[0].get("page_start", 1) if retrieved_chunks else 1
-                details.append(f"- **Earnest money / bid security:** **{bs_match.group(0).strip()}** *(Source: Page {p})*")
+            # --- Bid Security ---
+            bs_match = re.search(
+                r'(?:bid\s+security|earnest\s+money|call\s+deposit|cdr)[^\n]{0,120}?(\d+(?:\.\d+)?\s*%[^\n.]{0,60})',
+                all_text, re.IGNORECASE
+            )
+            if not bs_match:
+                bs_match = re.search(
+                    r'(\d+(?:\.\d+)?\s*%)[^\n]{0,60}?(?:bid\s+security|earnest\s+money|call\s+deposit|cdr)',
+                    all_text, re.IGNORECASE
+                )
+            bid_security_str = bs_match.group(0).strip() if bs_match else ""
+
+            # --- Scope extraction from first section summaries ---
+            scope_text = ""
+            if summary_data and summary_data.get("section_summaries"):
+                intro_sections = [s for s in summary_data["section_summaries"] if s.get("page_start", 99) <= 4]
+                if intro_sections:
+                    scope_text = intro_sections[0].get("text", "") or intro_sections[0].get("summary", "")
+
+            if not scope_text and retrieved_chunks:
+                # Use earliest-page chunk text as scope
+                sorted_chunks = sorted(retrieved_chunks, key=lambda c: c.get("page_start", 99))
+                scope_text = sorted_chunks[0].get("text", "")
+
+            # Clean scope to 2-3 sentences
+            sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', scope_text) if len(s.strip()) > 15]
+            scope_summary = " ".join(sentences[:3])
+
+            # --- Build title and org strings ---
+            if not tender_title and summary_data:
+                tender_title = summary_data.get("title", "") or summary_data.get("tender_title", "")
+            if not organization and summary_data:
+                organization = summary_data.get("organization", "")
+
+            # --- Build response ---
+            heading_parts = []
+            if tender_title:
+                heading_parts.append(f"**{tender_title}**")
+            heading_parts.append(f"issued by **{organization}**" if organization else "")
+            heading = " ".join(p for p in heading_parts if p)
+
+            overview_line = scope_summary if scope_summary else f"This tender document outlines the requirements and procurement guidelines for **{doc_name}**."
+            if heading:
+                overview_line = f"{heading}\n\n{overview_line}"
+
+            details = []
+            # Source pages for key info
+            p_dl = next((c.get("page_start", 1) for c in retrieved_chunks if any(w in c.get("text","").lower() for w in ["submission","deadline","last date","closing"])), 1)
+            p_bs = next((c.get("page_start", 1) for c in retrieved_chunks if any(w in c.get("text","").lower() for w in ["bid security","earnest money","call deposit","cdr"])), 1)
+
+            if submission_deadline_str:
+                details.append(f"- **Tender submission deadline:** **{submission_deadline_str}** *(Source: Page {p_dl})*")
             else:
-                details.append("- **Earnest money / bid security:** Not specified in the retrieved document.")
+                details.append("- **Tender submission deadline:** Not found — please check the tender notice (Page 1–4) of the document.")
+
+            if opening_datetime_str and opening_datetime_str != submission_deadline_str:
+                details.append(f"- **Bid opening date/time:** **{opening_datetime_str}** *(Source: Page {p_dl})*")
+
+            if bid_security_str:
+                details.append(f"- **Earnest money / bid security:** **{bid_security_str}** *(Source: Page {p_bs})*")
+            else:
+                details.append("- **Earnest money / bid security:** Not specified in retrieved sections.")
 
             details.append("- **Bid validity:** As specified in the tender document.")
             details.append("- **Eligibility:** As per instructions to bidders.")
             details.append("- **Delivery schedule:** As per schedule of requirements.")
             details.append("- **Payment terms:** As per tender terms and conditions.")
             details.append("- **Warranty:** As per technical specifications.")
-            details.append("- **Other important requirements:** Compliance with technical specifications and mandatory eligibility criteria.")
 
-            return f"## TENDER SUMMARY\n\n### Overview\n{overview}\n\n### Important Details\n" + "\n".join(details)
+            return f"## TENDER SUMMARY\n\n### Overview\n{overview_line}\n\n### Important Details\n" + "\n".join(details)
 
-        # 2. Deadline intent — scan all chunks with broad date patterns
+        # 2. Deadline intent — check stored deadline first, then scan chunks
         elif qtype == "TENDER_DEADLINE":
-            # Pattern 1: explicit "last date ... date/time"
+            # First: try stored deadline from DeadlineDatabase
+            doc_id = summary_data.get("doc_id", "") if summary_data else ""
+            if doc_id:
+                try:
+                    from deadlines.database import DeadlineDatabase
+                    stored = DeadlineDatabase.get_tender_deadline(doc_id)
+                    if stored and stored.get("submission_deadline"):
+                        from datetime import datetime
+                        sub_iso = stored["submission_deadline"]
+                        try:
+                            dt = datetime.fromisoformat(sub_iso)
+                            friendly_date = dt.strftime("%B %d, %Y at %I:%M %p")
+                        except Exception:
+                            friendly_date = sub_iso
+                        pg = stored.get("submission_deadline_source_page", 1)
+                        return f"The tender submission deadline is **{friendly_date}**.\n**Source: Page {pg}**"
+                except Exception:
+                    pass
+
+            # Second: scan retrieved chunks with broad date patterns
+            MONTH_RE = r'(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)'
             date_patterns = [
-                r'(?:last\s+date|submission\s+deadline|closing\s+date|bid\s+closing|submitted\s+by)[^\n]{0,120}?(\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}|\d{1,2}\s+[A-Za-z]+\s+\d{2,4})',
-                r'(\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4})[^\n]{0,60}?(?:by|before|upto)\s+(\d{1,2}[:\.]\d{2}\s*(?:AM|PM|am|pm)?)',
-                r'(?:date\s+of\s+closing|date\s+of\s+submission)[^\n]{0,80}(\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4})',
+                # "reach ... by 11:00 AM on or before August 24, 2026"
+                rf'(?:reach|submitted?|submission|deadline|last\s+date|closing\s+date|close\s+of\s+office|on\s+or\s+before)[^\n]{{0,120}}?({MONTH_RE}\s+\d{{1,2}},?\s+\d{{4}}[^\n]{{0,30}})',
+                # "August 24, 2026 ... by 11:00 AM"
+                rf'({MONTH_RE}\s+\d{{1,2}},?\s+\d{{4}})[^\n]{{0,60}}?(?:by|before|upto|at)',
+                # Numeric date with surrounding keyword
+                r'(?:last\s+date|submission\s+deadline|closing\s+date|bid\s+closing|submitted\s+by)[^\n]{0,120}?(\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4})',
+                # "DD Month YYYY"
+                rf'(\d{{1,2}}\s+{MONTH_RE}\s+\d{{4}})',
             ]
             for c in retrieved_chunks:
                 t = c.get("text", "")
                 for pat in date_patterns:
-                    m = re.search(pat, t, re.I)
+                    m = re.search(pat, t, re.IGNORECASE)
                     if m:
                         p = c.get("page_start", c.get("page_number", 1))
-                        matched = m.group(0).strip()
+                        matched = m.group(1).strip() if m.lastindex else m.group(0).strip()
                         return f"The tender submission deadline is **{matched}**.\n**Source: Page {p}**"
-            # If nothing found, be honest
-            return "I could not locate the exact submission deadline in the retrieved sections. Please check the tender notice (usually Page 1) of the uploaded document."
+            return "I could not locate the exact submission deadline in the retrieved sections. Please check the tender notice (usually Page 1–3) of the uploaded document."
 
         # 3. Bid Opening intent
         elif qtype == "BID_OPENING":

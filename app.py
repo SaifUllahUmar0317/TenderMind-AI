@@ -392,7 +392,10 @@ def chat_with_document():
     try:
         retriever = get_or_create_rag_retriever(doc_id)
         summary_data = DocumentSummarizer.get_summary(doc_id)
-
+        # Inject doc_id so offline RAG can look up stored deadline/metadata
+        if summary_data is None:
+            summary_data = {}
+        summary_data["doc_id"] = doc_id
         # Classify Intent before retrieval
         intent = question_type or LLMProvider.classify_question_type(question)
 

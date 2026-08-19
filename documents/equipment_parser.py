@@ -85,26 +85,51 @@ class EquipmentScheduleParser:
                     continue
 
                 cells = [str(c).strip() if c is not None else "" for c in raw_row]
-                
-                # Check if this row is a header row
+
+                # --- Header Detection (multi-strategy) ---
                 header_text = " ".join(cells).lower()
-                if ("s#" in header_text or "s. #" in header_text or "s.no" in header_text or "sr. #" in header_text or "sr #" in header_text) and ("description" in header_text or "item" in header_text or "specification" in header_text):
+
+                # Strategy 1: s#/sr#/s.no style header
+                if (("s#" in header_text or "s. #" in header_text or "s.no" in header_text
+                     or "sr. #" in header_text or "sr #" in header_text)
+                        and ("description" in header_text or "item" in header_text or "specification" in header_text)):
                     continue
-                
-                # Check if this row is a continuation of previous row
+
+                # Strategy 2: First cell is a generic column label like "Specifications" / "Description"
+                first_cell_lower = cells[0].lower().strip()
+                if (first_cell_lower in ("specifications", "description", "particulars",
+                                         "nomenclature", "item name", "item", "details", "s. no.")
+                        and any(k in header_text for k in ["qty", "quantity", "unit", "rate", "total", "amount", "price"])):
+                    continue
+
+                # Strategy 3: Pure-label secondary header rows (e.g. ['', '', 'Unit', 'Rate', ''])
+                non_empty = [c for c in cells if c]
+                if non_empty and all(c.lower() in (
+                        "unit", "rate", "qty", "quantity", "total", "amount",
+                        "price", "s#", "sr#", "sr.", "no.", "no", "s.no", "sr.no"
+                ) for c in non_empty):
+                    continue
+
+                # Strategy 4: "TOTAL COST" / "Grand Total" footer rows — skip outright
+                if any(k in header_text for k in ["total cost", "grand total", "total amount"]):
+                    continue
+
+                # --- Continuation Detection ---
                 first_cell = cells[0] if len(cells) > 0 else ""
                 second_cell = cells[1] if len(cells) > 1 else ""
                 third_cell = cells[2] if len(cells) > 2 else ""
-                
+
                 is_continuation = False
                 if not first_cell and not second_cell and len(consolidated_rows) > 0:
+                    is_continuation = True
+                elif (not first_cell and second_cell and len(consolidated_rows) > 0):
+                    # Continuation cable/accessory sub-row: empty name, non-empty spec
                     is_continuation = True
                 elif not first_cell.isdigit() and len(cells) >= 3 and not second_cell and third_cell and len(consolidated_rows) > 0:
                     is_continuation = True
 
                 if is_continuation and len(consolidated_rows) > 0:
                     last_rec = consolidated_rows[-1]
-                    # Append text to previous record
                     continuation_text = " ".join([c for c in cells if c])
                     last_rec["raw_cells"].append(continuation_text)
                     if p_num not in last_rec["pages"]:
@@ -141,45 +166,75 @@ class EquipmentScheduleParser:
             if not rem_cells:
                 continue
 
-            # Look for quantity pattern in cells (e.g. "16 Nos", "100 Meter", "04 Nos", "1 Set", "1", "2")
+            # --- Smart Column Layout Detection ---
+            # Detect the common 6-column BOQ layout: [Name, Spec, Unit, Qty_num, UnitRate, TotalRate]
+            # In this layout rem_cells = [Name(0), Spec(1), Unit(2), Qty_num(3), UnitRate(4), TotalRate(5)]
+            # Unit column: short word (Watt/No./Meter/Lot/Job/Nos/Set/Each)
+            # Qty_num column: pure integer string ("01", "10000", "1")
+            UNIT_WORDS = re.compile(
+                r'^(?:watt|watts|no\.|nos?|meter|meters|m|lot|lots|job|jobs|set|sets|'
+                r'each|pcs?|units?|kg|ltr|litre|litres|pack|pkg|lump\s*sum|l\.s\.|ls)$',
+                re.IGNORECASE
+            )
+            QTY_NUM = re.compile(r'^\d+$')
+
+            name = ""
+            qty = ""
+            spec_blob = ""
             qty_idx = -1
-            for idx, c in enumerate(rem_cells):
-                c_clean = c.strip()
-                if re.search(r'^(?:\d+\s*(?:nos|meter|meters|sets?|units?|pcs|pkg|pack|lot)|(?:0[1-9]|[1-9]\d*))$', c_clean, re.IGNORECASE) and len(c_clean) < 25:
-                    qty = c_clean
-                    qty_idx = idx
-                    break
 
-            if len(rem_cells) == 1:
-                name = rem_cells[0]
-            elif len(rem_cells) == 2:
-                if qty_idx == 1:
-                    name = rem_cells[0]
-                elif qty_idx == 0:
-                    qty = rem_cells[0]
-                    name = rem_cells[1]
-                else:
+            # Try to detect 6-col layout: ≥4 cells, cell[2] is unit word, cell[3] is pure number
+            if len(rem_cells) >= 4:
+                unit_candidate = rem_cells[2].strip()
+                qty_candidate = rem_cells[3].strip()
+                if UNIT_WORDS.match(unit_candidate) and QTY_NUM.match(qty_candidate):
                     name = rem_cells[0]
                     spec_blob = rem_cells[1]
-            elif len(rem_cells) >= 3:
-                if qty_idx == 1:  # [Description, Quantity, Specification]
-                    name = rem_cells[0]
-                    qty = rem_cells[1]
-                    spec_blob = " ".join(rem_cells[2:] + r_dict["raw_cells"][len(cells):])
-                elif qty_idx == len(rem_cells) - 1:  # [Item Name, Specification, Quantity]
-                    name = rem_cells[0]
-                    spec_blob = " ".join(rem_cells[1:-1] + r_dict["raw_cells"][len(cells):])
-                    qty = rem_cells[-1]
-                elif qty_idx == 2 and len(rem_cells) >= 3:
-                    name = rem_cells[0]
-                    spec_blob = rem_cells[1]
-                    qty = rem_cells[2]
-                else:
-                    name = rem_cells[0]
-                    qty = rem_cells[1] if len(rem_cells) > 1 and len(rem_cells[1]) < 15 else ""
-                    spec_blob = " ".join(rem_cells[2:] if qty else rem_cells[1:])
+                    qty = f"{qty_candidate} {unit_candidate}"
+                    qty_idx = 3  # mark as found
 
-            # Also check if additional text was merged from continuation rows
+            # Fall back to original scan if 6-col layout not detected
+            if qty_idx == -1:
+                for idx, c in enumerate(rem_cells):
+                    c_clean = c.strip()
+                    if re.search(
+                        r'^(?:\d+\s*(?:nos|no\.|meter|meters|sets?|units?|pcs|pkg|pack|lot|job|watt|watts|each|kg|ltr|litre)|(?:0[1-9]|[1-9]\d*))$',
+                        c_clean, re.IGNORECASE
+                    ) and len(c_clean) < 25:
+                        qty = c_clean
+                        qty_idx = idx
+                        break
+
+                if len(rem_cells) == 1:
+                    name = rem_cells[0]
+                elif len(rem_cells) == 2:
+                    if qty_idx == 1:
+                        name = rem_cells[0]
+                    elif qty_idx == 0:
+                        qty = rem_cells[0]
+                        name = rem_cells[1]
+                    else:
+                        name = rem_cells[0]
+                        spec_blob = rem_cells[1]
+                elif len(rem_cells) >= 3:
+                    if qty_idx == 1:  # [Description, Quantity, Specification]
+                        name = rem_cells[0]
+                        qty = rem_cells[1]
+                        spec_blob = " ".join(rem_cells[2:] + r_dict["raw_cells"][len(cells):])
+                    elif qty_idx == len(rem_cells) - 1:  # [Item Name, Specification, Quantity]
+                        name = rem_cells[0]
+                        spec_blob = " ".join(rem_cells[1:-1] + r_dict["raw_cells"][len(cells):])
+                        qty = rem_cells[-1]
+                    elif qty_idx == 2 and len(rem_cells) >= 3:
+                        name = rem_cells[0]
+                        spec_blob = rem_cells[1]
+                        qty = rem_cells[2]
+                    else:
+                        name = rem_cells[0]
+                        qty = rem_cells[1] if len(rem_cells) > 1 and len(rem_cells[1]) < 15 else ""
+                        spec_blob = " ".join(rem_cells[2:] if qty else rem_cells[1:])
+
+            # Merge continuation text into spec_blob
             if len(r_dict["raw_cells"]) > len(cells):
                 spec_blob += " " + " ".join(r_dict["raw_cells"][len(cells):])
 
