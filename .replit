@@ -1,0 +1,7 @@
+run = "python app.py"
+
+[env]
+HOST = "0.0.0.0"
+
+[nix]
+channel = "stable-23.05"

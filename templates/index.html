@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TenderMind AI — Intelligent Tender &amp; Document Platform</title>
+    <meta name="description" content="Enterprise AI Document Intelligence: RAG Tender Assistant, Smart PDF Compressor, and Unlimited PDF Combiner.">
+    
+    <!-- Google Fonts: Plus Jakarta Sans, Inter, & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- PDF.js CDN for client-side PDF preview rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf_viewer.min.css">
+    
+    <!-- Marked.js & DOMPurify for safe Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.8/purify.min.js"></script>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Ambient Background Lighting Mesh -->
+    <div class="ambient-glow ambient-glow-1"></div>
+    <div class="ambient-glow ambient-glow-2"></div>
+    <div class="ambient-grid-overlay"></div>
+
+    <div class="app-shell">
+        
+        <!-- TOP ENTERPRISE HEADER -->
+        <header class="top-header">
+            <div class="header-inner">
+                <!-- Brand Wordmark -->
+                <div class="brand-wordmark" id="brandHomeBtn" title="Return to Tender Assistant">
+                    <div class="brand-icon-globe">
+                        <div class="globe-mini-glow"></div>
+                        <i data-lucide="globe"></i>
+                    </div>
+                    <div class="brand-text-col">
+                        <div class="brand-title-wrap">
+                            <span class="brand-title">TenderMind</span>
+                            <span class="brand-badge-ai">AI</span>
+                        </div>
+                        <span class="brand-sub">GLOBAL IT SOLUTIONS · DOCUMENT INTELLIGENCE</span>
+                    </div>
+                </div>
+
+                <!-- Navigation Tabs -->
+                <nav class="top-nav">
+                    <div class="nav-pill-container">
+                        <button type="button" class="nav-link active" data-tab="assistant">
+                            <i data-lucide="sparkles" class="nav-icon"></i>
+                            <span>Tender Assistant</span>
+                        </button>
+                        <button type="button" class="nav-link" data-tab="deadlines">
+                            <i data-lucide="calendar-clock" class="nav-icon"></i>
+                            <span>Deadline Center</span>
+                        </button>
+                        <button type="button" class="nav-link" data-tab="compressor">
+                            <i data-lucide="minimize-2" class="nav-icon"></i>
+                            <span>PDF Compressor</span>
+                        </button>
+                        <button type="button" class="nav-link" data-tab="combiner">
+                            <i data-lucide="layers" class="nav-icon"></i>
+                            <span>PDF Combiner</span>
+                        </button>
+                    </div>
+                </nav>
+
+                <!-- Header Actions -->
+                <div class="header-actions">
+                    <!-- Notification Bell & Popover Panel -->
+                    <div class="notif-bell-wrapper">
+                        <button type="button" id="notifBellBtn" class="header-btn notif-bell-btn" title="Tender Deadline Notifications" aria-label="Notifications">
+                            <i data-lucide="bell"></i>
+                            <span id="notifBadge" class="notif-badge hidden">0</span>
+                        </button>
+                        
+                        <!-- Notification Popover Panel -->
+                        <div id="notifPanel" class="notif-panel hidden">
+                            <div class="notif-panel-header">
+                                <div class="notif-panel-title-wrap">
+                                    <i data-lucide="bell" class="notif-header-icon"></i>
+                                    <span class="notif-header-title">Notifications</span>
+                                    <span id="notifPanelCount" class="notif-panel-pill">0 unread</span>
+                                </div>
+                                <div class="notif-panel-actions">
+                                    <button type="button" id="markAllReadBtn" class="notif-action-text-btn" title="Mark all notifications as read">Mark read</button>
+                                    <button type="button" id="clearNotifsBtn" class="notif-action-icon-btn" title="Clear notification history"><i data-lucide="trash-2"></i></button>
+                                </div>
+                            </div>
+                            <div id="notifList" class="notif-list">
+                                <!-- Populated dynamically -->
+                            </div>
+                            <div id="notifEmptyState" class="notif-empty-state hidden">
+                                <div class="notif-empty-icon"><i data-lucide="bell-off"></i></div>
+                                <p class="notif-empty-title">No notifications yet</p>
+                                <span class="notif-empty-sub">Deadline alerts will appear here.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Engine Status Pill -->
+                    <div class="status-pill-badge" title="RAG Engine & Vector Store Online">
+                        <span class="status-dot-pulse"></span>
+                        <span class="status-pill-text">AI ENGINE ONLINE</span>
+                    </div>
+
+                    <!-- Theme Toggle -->
+                    <button type="button" id="themeToggleBtn" class="header-btn theme-btn" title="Toggle Light / Dark Theme">
+                        <i data-lucide="moon" id="themeIcon"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- MAIN CONTENT CONTAINER -->
+        <main class="main-body">
+
+            <!-- ============================================================ -->
+            <!-- LEFT RECENT SESSIONS SIDEBAR (TRUE LAYOUT PANEL) -->
+            <!-- ============================================================ -->
+            <aside id="heroRecentSidebar" class="hero-recent-sidebar sidebar-hidden" aria-label="Recent Sessions">
+
+                <!-- EXPANDED STATE HEADER -->
+                <div class="rss-header">
+                    <div class="rss-header-left">
+                        <div class="rss-header-icon-wrap">
+                            <i data-lucide="history"></i>
+                        </div>
+                        <span class="rss-header-title">Recent Sessions</span>
+                        <span class="rss-count-badge" id="sessionCountBadge">0</span>
+                    </div>
+                    <div class="rss-header-actions">
+                        <button type="button" id="clearAllSessionsBtn" class="rss-icon-btn" title="Clear all sessions" aria-label="Clear all sessions">
+                            <i data-lucide="trash-2"></i>
+                        </button>
+                        <button type="button" id="closeRecentSidebarBtn" class="rss-collapse-btn" title="Collapse sidebar" aria-label="Collapse recent sessions sidebar">
+                            <i data-lucide="chevron-left"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- EXPANDED: NEW SESSION BUTTON -->
+                <div class="rss-new-session-row">
+                    <button type="button" id="rssNewSessionBtn" class="rss-new-session-btn" title="Start a new tender session" aria-label="Start new session">
+                        <i data-lucide="plus"></i>
+                        <span>New Session</span>
+                    </button>
+                </div>
+
+                <!-- SESSIONS LIST -->
+                <div class="rss-body">
+                    <div id="heroSessionsList" class="hero-sessions-list">
+                        <!-- Populated dynamically -->
+                    </div>
+                    <!-- EMPTY STATE -->
+                    <div id="rssEmptyState" class="rss-empty-state hidden">
+                        <div class="rss-empty-icon">
+                            <i data-lucide="folder-open"></i>
+                        </div>
+                        <p class="rss-empty-title">No recent sessions</p>
+                        <p class="rss-empty-sub">Upload a tender document to start a new session.</p>
+                    </div>
+                </div>
+
+                <!-- COLLAPSED RAIL STATE -->
+                <div class="rss-rail">
+                    <button type="button" id="openRecentSidebarBtn" class="rss-rail-expand-btn" title="Expand recent sessions" aria-label="Expand recent sessions">
+                        <i data-lucide="chevron-right"></i>
+                    </button>
+                    <div class="rss-rail-icons" id="rssRailIcons">
+                        <!-- Mini doc icons rendered by JS -->
+                    </div>
+                    <div class="rss-rail-count-wrap">
+                        <span class="rss-rail-count" id="floatingSessionCountBadge">0</span>
+                    </div>
+                </div>
+
+            </aside>
+
+            <!-- ============================================================ -->
+            <!-- SCROLLABLE MAIN CONTENT WRAPPER -->
+            <!-- ============================================================ -->
+            <div class="main-content-panel">
+
+            <!-- Global Alert Banner -->
+            <div id="errorAlert" class="alert alert-error hidden">
+                <i data-lucide="alert-circle" class="alert-icon"></i>
+                <span id="errorMessage" class="alert-text">An error occurred.</span>
+                <button class="alert-close" id="closeAlertBtn"><i data-lucide="x"></i></button>
+            </div>
+
+            <!-- ============================================================ -->
+            <!-- FEATURE 1: TENDER ASSISTANT (HERO & INTAKE VIEW) -->
+            <!-- ============================================================ -->
+            <section id="assistantView" class="view-section active hero-view">
+
+                <div class="hero-layout">
+                    <!-- LEFT COLUMN: EDITORIAL HERO & VALUE PROPOSITION -->
+                    <div class="hero-left">
+                        <div class="hero-badge-pill">
+                            <i data-lucide="sparkles" class="badge-icon"></i>
+                            <span>TENDER INTELLIGENCE PLATFORM</span>
+                        </div>
+                        
+                        <h1 class="editorial-title">
+                            Understand Tenders<br>
+                            With <span class="gradient-text">TenderMind AI.</span>
+                        </h1>
+                        
+                        <p class="editorial-subtitle">
+                            Upload complex bidding documents to instantly extract technical requirements, query BOQs, analyze specifications, and receive answers grounded in your document.
+                        </p>
+                    </div>
+
+                    <!-- RIGHT COLUMN: DRAG AND DROP PDF INTAKE BOX -->
+                    <div class="hero-right">
+                        <div id="dropZone" class="intake-dropzone hero-dropzone">
+                            <div class="dz-glow-backdrop"></div>
+                            <div class="dz-icon-wrap">
+                                <i data-lucide="file-up"></i>
+                            </div>
+                            <div class="dropzone-text">
+                                <span class="dz-title">Drop tender document here</span>
+                                <span class="dz-sub">or click anywhere in this box to browse files</span>
+                            </div>
+
+                            <input type="file" id="fileInput" accept=".pdf" class="hidden-input">
+                            
+                            <button type="button" class="btn btn-primary btn-md" id="browseBtn">
+                                <i data-lucide="upload"></i>
+                                BROWSE FILES
+                            </button>
+                            
+                            <div class="dz-formats-hint">
+                                <span class="format-pill">PDF</span>
+                                <span class="format-pill">SCANNED OCR</span>
+                                <span class="format-pill">LARGE PACKAGES</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================================ -->
+            <!-- FEATURE 2: PDF COMPRESSOR -->
+            <!-- ============================================================ -->
+            <section id="compressorView" class="view-section hidden">
+                <div class="view-title-block">
+                    <div class="view-badge">
+                        <i data-lucide="minimize-2"></i>
+                        <span>02 / PDF COMPRESSOR</span>
+                    </div>
+                    <h2>Intelligent PDF Compression</h2>
+                    <p>Reduce document file sizes dramatically while preserving crisp typography, vector sharpness, and high-fidelity layouts.</p>
+                </div>
+
+                <div class="compressor-grid">
+                    <!-- INTAKE & SETTINGS PANEL -->
+                    <div class="compressor-card">
+                        <div id="compressorDropZone" class="intake-dropzone">
+                            <div class="dz-glow-backdrop"></div>
+                            <div class="dz-icon-wrap">
+                                <i data-lucide="file-down"></i>
+                            </div>
+                            <div class="dropzone-text">
+                                <span class="dz-title">Drop PDF file to compress</span>
+                                <span class="dz-sub">or click anywhere to select from your computer</span>
+                            </div>
+                            <input type="file" id="compressorFileInput" accept=".pdf" class="hidden-input">
+                            <button type="button" class="btn btn-primary btn-sm" id="compressorBrowseBtn">
+                                <i data-lucide="upload"></i>
+                                SELECT PDF FILE
+                            </button>
+                        </div>
+
+                        <!-- COMPRESSION SETTINGS MODE PICKER -->
+                        <div id="compressorSettingsBox" class="compressor-settings-box hidden">
+                            <!-- Pre-compression Analysis Summary Card -->
+                            <div id="pdfAnalysisCard" class="analysis-summary-card">
+                                <div class="analysis-header">
+                                    <span class="section-label">DOCUMENT ANALYSIS</span>
+                                    <h4 id="analysisFileName">document.pdf</h4>
+                                </div>
+                                <div class="analysis-stats-grid">
+                                    <div class="analysis-stat">
+                                        <span class="lbl">PAGE COUNT</span>
+                                        <span id="anaPageCount" class="val">0</span>
+                                    </div>
+                                    <div class="analysis-stat">
+                                        <span class="lbl">FILE SIZE</span>
+                                        <span id="anaFileSize" class="val">0 MB</span>
+                                    </div>
+                                    <div class="analysis-stat">
+                                        <span class="lbl">TEXT STRUCTURE</span>
+                                        <span id="anaTextType" class="val">Selectable Text</span>
+                                    </div>
+                                    <div class="analysis-stat">
+                                        <span class="lbl">IMAGES &amp; FONTS</span>
+                                        <span id="anaImagesFonts" class="val">0 images • 0 fonts</span>
+                                    </div>
+                                    <div class="analysis-stat highlight">
+                                        <span class="lbl">EST. SAVINGS</span>
+                                        <span id="anaEstSavings" class="val accent">30% – 65%</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="setting-title">SELECT COMPRESSION MODE</div>
+                            <div class="mode-options-grid">
+                                <label class="mode-card active">
+                                    <input type="radio" name="compMode" value="recommended" checked>
+                                    <div class="mode-indicator"><i data-lucide="check"></i></div>
+                                    <div class="mode-info">
+                                        <span class="mode-name">Recommended</span>
+                                        <span class="mode-desc">Smart image optimization &amp; stream cleanup. Ideal balance of size and crisp quality.</span>
+                                    </div>
+                                </label>
+                                <label class="mode-card">
+                                    <input type="radio" name="compMode" value="balanced">
+                                    <div class="mode-indicator"><i data-lucide="check"></i></div>
+                                    <div class="mode-info">
+                                        <span class="mode-name">Balanced</span>
+                                        <span class="mode-desc">Moderate compression balancing size reduction and clear readability.</span>
+                                    </div>
+                                </label>
+                                <label class="mode-card">
+                                    <input type="radio" name="compMode" value="maximum">
+                                    <div class="mode-indicator"><i data-lucide="check"></i></div>
+                                    <div class="mode-info">
+                                        <span class="mode-name">Maximum Compression</span>
+                                        <span class="mode-desc">Smallest possible file size for email limits and web submissions.</span>
+                                    </div>
+                                </label>
+                                <label class="mode-card">
+                                    <input type="radio" name="compMode" value="high_quality">
+                                    <div class="mode-indicator"><i data-lucide="check"></i></div>
+                                    <div class="mode-info">
+                                        <span class="mode-name">High Quality</span>
+                                        <span class="mode-desc">Minimal size reduction prioritizing maximum visual fidelity and sharpness.</span>
+                                    </div>
+                                </label>
+                            </div>
+
+                            <button type="button" id="startCompressBtn" class="btn btn-primary btn-md btn-full">
+                                <i data-lucide="zap"></i>
+                                COMPRESS PDF NOW
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- STATISTICS & RESULT DISPLAY -->
+                    <div id="compressorResultCard" class="compressor-result-card hidden">
+                        <div class="result-header">
+                            <span class="section-label-success"><i data-lucide="check-circle-2"></i> OPTIMIZATION COMPLETE</span>
+                            <h3>Document Compressed Successfully</h3>
+                        </div>
+
+                        <div class="stats-comparison-grid">
+                            <div class="stat-box">
+                                <span class="stat-lbl">ORIGINAL SIZE</span>
+                                <span id="compOrigSize" class="stat-val">0 MB</span>
+                            </div>
+                            <div class="stat-box highlighted">
+                                <span class="stat-lbl">COMPRESSED SIZE</span>
+                                <span id="compNewSize" class="stat-val accent">0 MB</span>
+                            </div>
+                            <div class="stat-box">
+                                <span class="stat-lbl">SPACE SAVED</span>
+                                <span id="compSavedPct" class="stat-val green">0%</span>
+                            </div>
+                            <div class="stat-box">
+                                <span class="stat-lbl">PROCESSING TIME</span>
+                                <span id="compProcTime" class="stat-val">0.0s</span>
+                            </div>
+                        </div>
+
+                        <div class="result-actions-row">
+                            <a id="downloadCompressedBtn" href="#" download class="btn btn-primary btn-md btn-flex">
+                                <i data-lucide="download"></i>
+                                DOWNLOAD COMPRESSED PDF
+                            </a>
+                            <button type="button" id="resetCompressorBtn" class="btn btn-outlined btn-md">
+                                <i data-lucide="rotate-ccw"></i>
+                                Compress Another
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================================ -->
+            <!-- FEATURE 3: PDF COMBINER -->
+            <!-- ============================================================ -->
+            <section id="combinerView" class="view-section hidden">
+                <div class="view-title-block">
+                    <div class="view-badge">
+                        <i data-lucide="layers"></i>
+                        <span>03 / PDF COMBINER</span>
+                    </div>
+                    <h2>Combine Documents &amp; Images</h2>
+                    <p>Combine multiple PDFs, Word documents (.docx, .doc), JPG, PNG, and WEBP files. Drag and drop thumbnails to reorder or rotate pages.</p>
+                </div>
+
+                <div class="combiner-workspace">
+                    <!-- COMBINER INTAKE BAR & CONTROLS (Appears once pages are loaded) -->
+                    <div class="combiner-controls-bar hidden">
+                        <div class="combiner-actions">
+                            <input type="file" id="combinerFileInput" accept=".pdf,.docx,.doc,.jpg,.jpeg,.png,.webp,.bmp" multiple class="hidden-input">
+                            <button type="button" id="combinerAddBtn" class="btn btn-primary btn-sm">
+                                <i data-lucide="plus"></i>
+                                ADD FILES / PAGES
+                            </button>
+                            <span class="combiner-meta-info" id="combinerStatsText">0 pages loaded</span>
+                        </div>
+
+                        <div class="combiner-global-btns">
+                            <button type="button" id="clearCombinerBtn" class="btn btn-outlined btn-sm">
+                                <i data-lucide="trash-2"></i>
+                                Clear All
+                            </button>
+                            <button type="button" id="generateCombinedPdfBtn" class="btn btn-primary btn-sm btn-glow">
+                                <i data-lucide="sparkles"></i>
+                                COMBINE PDF
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- COMBINER INTAKE DROPZONE (When empty) -->
+                    <div id="combinerDropZone" class="intake-dropzone">
+                        <div class="dz-glow-backdrop"></div>
+                        <div class="dz-icon-wrap">
+                            <i data-lucide="layers"></i>
+                        </div>
+                        <div class="dropzone-text">
+                            <span class="dz-title">Drop PDFs, Word documents (.docx, .doc), or images here</span>
+                            <span class="dz-sub">Add as many files and pages as needed. Large document collections supported.</span>
+                        </div>
+                        <button type="button" class="btn btn-primary btn-md" onclick="document.getElementById('combinerFileInput').click()">
+                            <i data-lucide="upload"></i>
+                            BROWSE FILES
+                        </button>
+                        <div class="dz-formats-hint">
+                            <span class="format-pill">PDF</span>
+                            <span class="format-pill">DOCX</span>
+                            <span class="format-pill">JPG</span>
+                            <span class="format-pill">PNG</span>
+                            <span class="format-pill">WEBP</span>
+                        </div>
+                    </div>
+
+                    <!-- COMBINER PROGRESS OVERLAY -->
+                    <div id="combinerProgressBox" class="processing-box hidden" style="margin-bottom: 1.5rem;">
+                        <div class="proc-header">
+                            <span id="combinerProgressTitle" style="font-weight: 600;">Processing files...</span>
+                            <button type="button" id="cancelCombinerBtn" class="btn btn-outlined btn-sm" style="padding: 0.2rem 0.6rem; font-size: 0.75rem;">Cancel</button>
+                        </div>
+                        <div class="progress-bar-container">
+                            <div id="combinerProgressBar" class="progress-bar" style="width: 0%;"></div>
+                        </div>
+                        <div class="proc-footer" style="margin-top: 0.5rem; display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-secondary);">
+                            <span id="combinerProgressStatusText">Uploading and extracting pages...</span>
+                            <span id="combinerProgressPercent">0%</span>
+                        </div>
+                    </div>
+
+                    <!-- DRAGGABLE PAGE THUMBNAILS CANVAS -->
+                    <div id="combinerCanvas" class="combiner-canvas hidden">
+                        <div class="canvas-instructions">
+                            <i data-lucide="move"></i>
+                            <span>Drag and drop cards to reorder pages. Use rotate or delete buttons to manage individual sheets.</span>
+                        </div>
+                        <div id="pageThumbnailsGrid" class="thumbnails-grid">
+                            <!-- Page thumbnails rendered dynamically -->
+                        </div>
+                    </div>
+
+
+                    <!-- COMBINER RESULT MODAL / CARD -->
+                    <div id="combinerResultCard" class="combiner-result-card hidden">
+                        <div class="result-header">
+                            <span class="section-label-success"><i data-lucide="check-circle-2"></i> PDF READY</span>
+                            <h3>Document Package Created Successfully</h3>
+                        </div>
+                        <div class="stats-comparison-grid">
+                            <div class="stat-box">
+                                <span class="stat-lbl">TOTAL PAGES</span>
+                                <span id="combTotalPages" class="stat-val">0</span>
+                            </div>
+                            <div class="stat-box highlighted">
+                                <span class="stat-lbl">FILE SIZE</span>
+                                <span id="combFileSize" class="stat-val accent">0 MB</span>
+                            </div>
+                            <div class="stat-box">
+                                <span class="stat-lbl">PROCESSING TIME</span>
+                                <span id="combProcTime" class="stat-val">0.0s</span>
+                            </div>
+                        </div>
+                        <div class="result-actions-row">
+                            <a id="downloadCombinedBtn" href="#" download class="btn btn-primary btn-md btn-flex">
+                                <i data-lucide="download"></i>
+                                DOWNLOAD COMBINED PDF
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================================ -->
+            <!-- FEATURE 4: TENDER DEADLINE REMINDER CENTER -->
+            <!-- ============================================================ -->
+            <section id="deadlinesView" class="view-section hidden">
+                <div class="deadlines-header-block">
+                    <div class="dh-left">
+                        <div class="view-badge">
+                            <i data-lucide="calendar-clock"></i>
+                            <span>04 / DEADLINE REMINDER CENTER</span>
+                        </div>
+                        <h2>Deadline Management System</h2>
+                        <p>Track bidding milestones, manage intelligent deadline reminders, and never miss a tender submission cutoff.</p>
+                        <button type="button" id="addManualDeadlineBtn" class="btn btn-primary btn-md btn-glow dh-add-btn">
+                            <i data-lucide="plus-circle"></i>
+                            + ADD TENDER DEADLINE
+                        </button>
+                    </div>
+                    <!-- Delete All: absolutely pinned to the far right, above Completed/Expired KPI -->
+                    <button type="button" id="deleteAllDeadlinesBtn" class="btn btn-outlined btn-md dh-delete-all" title="Delete all deadlines and reminders">
+                        <i data-lucide="trash-2"></i>
+                        Delete All
+                    </button>
+                </div>
+
+                <!-- KPI SUMMARY METRIC CARDS -->
+                <div class="deadline-kpi-grid">
+                    <div class="kpi-card kpi-red" data-filter="due_tomorrow">
+                        <div class="kpi-icon-wrap">
+                            <i data-lucide="alert-triangle"></i>
+                        </div>
+                        <div class="kpi-data">
+                            <span class="kpi-value" id="kpiDueTomorrow">0</span>
+                            <span class="kpi-label">Due Tomorrow</span>
+                        </div>
+                        <span class="kpi-indicator-dot red-pulse"></span>
+                    </div>
+
+                    <div class="kpi-card kpi-yellow" data-filter="due_week">
+                        <div class="kpi-icon-wrap">
+                            <i data-lucide="clock"></i>
+                        </div>
+                        <div class="kpi-data">
+                            <span class="kpi-value" id="kpiDueThisWeek">0</span>
+                            <span class="kpi-label">Due This Week</span>
+                        </div>
+                        <span class="kpi-indicator-dot yellow-dot"></span>
+                    </div>
+
+                    <div class="kpi-card kpi-green" data-filter="upcoming">
+                        <div class="kpi-icon-wrap">
+                            <i data-lucide="calendar-check"></i>
+                        </div>
+                        <div class="kpi-data">
+                            <span class="kpi-value" id="kpiUpcoming">0</span>
+                            <span class="kpi-label">Upcoming</span>
+                        </div>
+                        <span class="kpi-indicator-dot green-dot"></span>
+                    </div>
+
+                    <div class="kpi-card kpi-gray" data-filter="expired">
+                        <div class="kpi-icon-wrap">
+                            <i data-lucide="check-circle"></i>
+                        </div>
+                        <div class="kpi-data">
+                            <span class="kpi-value" id="kpiExpired">0</span>
+                            <span class="kpi-label">Completed / Expired</span>
+                        </div>
+                        <span class="kpi-indicator-dot gray-dot"></span>
+                    </div>
+                </div>
+
+                <!-- CONTROLS & FILTER BAR -->
+                <div class="deadline-controls-bar">
+                    <!-- Search Input -->
+                    <div class="deadline-search-wrap">
+                        <i data-lucide="search" class="search-icon"></i>
+                        <input type="text" id="deadlineSearchInput" placeholder="Search tenders, organizations, or documents..." class="deadline-search-input">
+                        <button type="button" id="clearDeadlineSearchBtn" class="clear-search-btn hidden" title="Clear search"><i data-lucide="x"></i></button>
+                    </div>
+
+                    <!-- Filter Tabs -->
+                    <div class="deadline-filter-pills">
+                        <button type="button" class="df-pill active" data-filter="all">All Deadlines</button>
+                        <button type="button" class="df-pill" data-filter="upcoming">Upcoming</button>
+                        <button type="button" class="df-pill" data-filter="due_soon">Due Soon</button>
+                        <button type="button" class="df-pill" data-filter="expired">Expired</button>
+                    </div>
+
+                    <!-- Sort Select -->
+                    <div class="deadline-sort-wrap">
+                        <label for="deadlineSortSelect" class="sort-label"><i data-lucide="arrow-up-down"></i> Sort:</label>
+                        <select id="deadlineSortSelect" class="deadline-sort-select">
+                            <option value="nearest" selected>Nearest Deadline</option>
+                            <option value="latest_added">Latest Added</option>
+                            <option value="organization">Organization</option>
+                            <option value="title">Tender Title</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- TENDERS DEADLINE LIST / GRID -->
+                <div class="deadlines-container">
+                    <div id="deadlinesList" class="deadlines-grid">
+                        <!-- Populated dynamically by JS -->
+                    </div>
+
+                    <!-- EMPTY STATE -->
+                    <div id="deadlinesEmptyState" class="deadlines-empty-card hidden">
+                        <div class="dec-icon"><i data-lucide="calendar-x"></i></div>
+                        <h3>No tender deadlines found</h3>
+                        <p id="deadlinesEmptySub">Upload a tender document or manually track an external bidding deadline.</p>
+                        <div class="dec-actions">
+                            <button type="button" class="btn btn-primary btn-md" id="emptyAddDeadlineBtn">
+                                <i data-lucide="plus"></i>
+                                + Track New Deadline
+                            </button>
+                            <button type="button" class="btn btn-outlined btn-md" onclick="switchTab('assistant')">
+                                <i data-lucide="upload-cloud"></i>
+                                Upload Tender PDF
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================================ -->
+            <!-- VIEW: 3-COLUMN ARCHITECTURAL WORKSPACE (RAG CHATBOT) -->
+            <!-- ============================================================ -->
+            <section id="workspaceView" class="view-section hidden">
+                <!-- Workspace Bar -->
+                <div class="workspace-bar">
+                    <div class="ws-doc-info">
+                        <!-- Toggle Chat History Sidebar -->
+                        <button type="button" id="toggleChatHistoryBtn" class="ws-icon-btn" title="Toggle Chat History">
+                            <i data-lucide="panel-left"></i>
+                        </button>
+                        <div class="ws-doc-badge">
+                            <i data-lucide="file-text"></i>
+                        </div>
+                        <div class="ws-doc-titles">
+                            <span class="ws-label">ACTIVE TENDER</span>
+                            <span id="activeDocTitle" class="ws-doc-name">Document</span>
+                        </div>
+                        <span class="status-tag">● READY FOR Q&amp;A</span>
+                    </div>
+
+                    <div class="ws-actions">
+                        <button id="newExtractBtn" class="btn btn-outlined btn-sm">
+                            <i data-lucide="upload-cloud"></i>
+                            + ADD TENDER
+                        </button>
+                    </div>
+                </div>
+
+                <!-- FULL WORKSPACE LAYOUT -->
+                <div class="workspace-layout">
+                    <!-- CHAT HISTORY SIDEBAR (Left, ChatGPT-style) -->
+                    <aside id="chatHistorySidebar" class="chat-history-sidebar">
+                        <div class="chat-history-header">
+                            <span class="chat-history-title">CONVERSATIONS</span>
+                            <button type="button" id="newChatBtn" class="ch-new-btn" title="Start New Conversation">
+                                <i data-lucide="plus"></i>
+                            </button>
+                        </div>
+                        <div class="chat-history-list" id="chatHistoryList">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </aside>
+
+                    <!-- MAIN 3-COLUMN GRID -->
+                    <div class="workspace-grid">
+                    
+                        <!-- COLUMN 1: PDF VIEWPORT -->
+                        <div class="pane pane-center">
+                            <div class="pane-header">
+                                <div class="pane-title-wrap">
+                                    <i data-lucide="eye"></i>
+                                    <span class="pane-title">DOCUMENT PREVIEW</span>
+                                </div>
+                                <div class="pdf-controls">
+                                    <button id="prevPageBtn" class="icon-btn-sm" title="Previous Page"><i data-lucide="chevron-left"></i></button>
+                                    <span class="page-indicator">Page <input type="number" id="pageNumberInput" value="1" min="1" class="page-input"> of <span id="pageCountSpan">1</span></span>
+                                    <button id="nextPageBtn" class="icon-btn-sm" title="Next Page"><i data-lucide="chevron-right"></i></button>
+                                    <div class="zoom-controls">
+                                        <button id="zoomOutBtn" class="icon-btn-sm" title="Zoom Out"><i data-lucide="zoom-out"></i></button>
+                                        <span id="zoomPercentSpan" class="zoom-val">100%</span>
+                                        <button id="zoomInBtn" class="icon-btn-sm" title="Zoom In"><i data-lucide="zoom-in"></i></button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="pane-content pdf-viewport" id="pdfViewport">
+                                <div id="pdfCanvasWrapper" class="pdf-canvas-wrapper">
+                                    <canvas id="pdfRenderCanvas"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- RESIZER GUTTER -->
+                        <div class="resizer-gutter" id="resizerChatGutter" title="Drag to adjust width"></div>
+
+                        <!-- COLUMN 2: EMBEDDED ANALYST ASSISTANT -->
+                        <div class="pane pane-right">
+                            <div class="pane-header">
+                                <div class="pane-title-wrap">
+                                    <div class="analyst-status-indicator"></div>
+                                    <span class="pane-title">TENDERMIND ANALYST</span>
+                                </div>
+                                <div class="pane-actions">
+                                    <button id="clearChatBtn" class="icon-btn-sm" title="Clear Conversation"><i data-lucide="trash-2"></i></button>
+                                </div>
+                            </div>
+
+                            <!-- Chat Messages Feed -->
+                            <div class="pane-content chat-viewport" id="chatFeed">
+                                <div class="chat-welcome-block">
+                                    <div class="welcome-badge">
+                                        <i data-lucide="bot"></i>
+                                        <span>DOCUMENT ANALYST</span>
+                                    </div>
+                                    <h3>Tender document ready for analysis.</h3>
+                                    <p>Ask technical questions, verify eligibility clauses, or select a quick query below to extract key requirements and equipment schedules.</p>
+                                    
+                                    <div class="quick-prompts-list">
+                                        <button class="quick-prompt-item primary-item" onclick="sendQuickQuery('Summarize tender requirements and submission deadlines.', 'summary')">
+                                            <i data-lucide="file-check-2"></i>
+                                            <span>Summarize Tender Requirements &amp; Deadlines</span>
+                                        </button>
+                                        <button class="quick-prompt-item" onclick="sendQuickQuery('what is the tender deadline for this tender?', 'deadline')">
+                                            <i data-lucide="calendar-clock"></i>
+                                            <span>What is the tender deadline for this tender?</span>
+                                        </button>
+                                        <button class="quick-prompt-item" onclick="sendQuickQuery('what is the earnest money, call deposit or bid security?', 'bid_security')">
+                                            <i data-lucide="coins"></i>
+                                            <span>What is the earnest money, call deposit or bid security?</span>
+                                        </button>
+                                        <button class="quick-prompt-item" onclick="sendQuickQuery('List all equipment items, quantities, and technical specifications.', 'equipment_specs')">
+                                            <i data-lucide="list-checks"></i>
+                                            <span>Extract Equipment Schedule &amp; Specifications</span>
+                                        </button>
+                                        <button class="quick-prompt-item" onclick="sendQuickQuery('Give me the official links for all the equipments in this tender document.', 'equipment_links')">
+                                            <i data-lucide="external-link"></i>
+                                            <span>Official Links for all Equipments</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Chat Input Bar -->
+                            <div class="chat-input-bar">
+                                <form id="chatForm" class="chat-input-wrapper">
+                                    <textarea id="chatInput" placeholder="Ask about specifications, search products online, deadlines..." rows="1" class="chat-textarea"></textarea>
+                                    <button type="submit" id="sendBtn" class="chat-send-btn" title="Send Message (Enter)">
+                                        <i data-lucide="arrow-right"></i>
+                                    </button>
+                                </form>
+                                <div class="chat-input-hint">
+                                    <span>Grounded in active PDF with FAISS hybrid vector search. Press <strong>Enter ↵</strong> to send, <strong>Shift + Enter</strong> for new line.</span>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </section>
+
+            </div><!-- /.main-content-panel -->
+        </main>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- DEADLINE MODAL 1: DEADLINE DETECTED CONFIRMATION MODAL -->
+    <!-- ============================================================ -->
+    <div id="deadlineConfirmModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="dcmTitle">
+        <div class="modal-card deadline-confirm-card">
+            <div class="modal-header">
+                <div class="dcm-header-badge">
+                    <span class="dcm-badge-dot"></span>
+                    <span id="dcmStatusText">DEADLINE DETECTED</span>
+                </div>
+                <button type="button" class="modal-close-btn" id="closeDeadlineConfirmModalBtn" aria-label="Close modal">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            
+            <div class="dcm-body">
+                <div class="dcm-meta-group">
+                    <span class="dcm-label">TENDER TITLE</span>
+                    <h3 id="dcmTenderTitle" class="dcm-title">Procurement of DC Inverter Air Conditioners</h3>
+                </div>
+
+                <div class="dcm-meta-group">
+                    <span class="dcm-label">ORGANIZATION / PROCURING ENTITY</span>
+                    <div id="dcmOrganization" class="dcm-val-strong">Institute of Management Sciences</div>
+                </div>
+
+                <div class="dcm-highlight-box">
+                    <div class="dcm-highlight-left">
+                        <span class="dcm-label-accent">PRIMARY SUBMISSION DEADLINE</span>
+                        <div class="dcm-datetime-display">
+                            <span id="dcmDeadlineDate" class="dcm-date">17 August 2026</span>
+                            <span class="dcm-time-divider">•</span>
+                            <span id="dcmDeadlineTime" class="dcm-time">12:00 PM</span>
+                        </div>
+                        <div class="dcm-tz-row">
+                            <i data-lucide="globe"></i>
+                            <span id="dcmTimezone">Pakistan Standard Time (UTC+05:00)</span>
+                        </div>
+                    </div>
+                    <div class="dcm-source-badge" id="dcmSourceBadge" title="Click to view page in document">
+                        <i data-lucide="file-text"></i>
+                        <span id="dcmSourcePage">Page 1</span>
+                    </div>
+                </div>
+
+                <!-- Multiple Candidates Selector (Shown if multiple dates detected) -->
+                <div id="dcmCandidatesWrap" class="dcm-candidates-wrap hidden">
+                    <span class="dcm-label">MULTIPLE DATES DETECTED — SELECT CORRECT SUBMISSION DEADLINE:</span>
+                    <div id="dcmCandidatesList" class="dcm-candidates-list">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <div class="dcm-reminders-preview">
+                    <span class="dcm-label">SCHEDULED REMINDERS (DEFAULT):</span>
+                    <div class="dcm-pills-row">
+                        <span class="dcm-pill"><i data-lucide="check"></i> 3 days before</span>
+                        <span class="dcm-pill"><i data-lucide="check"></i> 1 day before</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" id="dcmEditBtn" class="btn btn-outlined btn-md">
+                    <i data-lucide="edit-3"></i>
+                    Edit Details
+                </button>
+                <button type="button" id="dcmConfirmBtn" class="btn btn-primary btn-md btn-glow">
+                    <i data-lucide="bell-ring"></i>
+                    Confirm Deadline &amp; Set Reminders
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- DEADLINE MODAL 2: ADD / EDIT DEADLINE MODAL -->
+    <!-- ============================================================ -->
+    <div id="deadlineEditModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+        <div class="modal-card deadline-edit-card">
+            <div class="modal-header">
+                <div class="modal-title-wrap">
+                    <i data-lucide="calendar-plus"></i>
+                    <h3 id="demModalTitle">Edit Tender Deadline</h3>
+                </div>
+                <button type="button" class="modal-close-btn" id="closeDeadlineEditModalBtn" aria-label="Close modal">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+
+            <form id="deadlineEditForm" class="dem-form">
+                <input type="hidden" id="demTenderId" value="">
+                <input type="hidden" id="demOrg" value="">
+                <input type="hidden" id="demTimezone" value="Asia/Karachi">
+                <input type="hidden" id="demSourcePage" value="1">
+                
+                <div class="form-group">
+                    <label for="demTitle">Tender Title / Name <span class="req">*</span></label>
+                    <input type="text" id="demTitle" required placeholder="e.g. Procurement of DC Inverter Air Conditioners" class="form-input">
+                </div>
+
+                <div class="form-row-2">
+                    <div class="form-group">
+                        <label for="demDate">Submission Deadline Date <span class="req">*</span></label>
+                        <input type="date" id="demDate" required class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label for="demTime">Submission Deadline Time <span class="req">*</span></label>
+                        <input type="time" id="demTime" required value="12:00" class="form-input">
+                    </div>
+                </div>
+
+                <!-- Reminder Schedule Toggles -->
+                <div class="form-group-section">
+                    <label class="section-subheading">Reminder Schedule Triggers</label>
+                    <div class="reminders-checkbox-grid">
+                        <label class="rem-check-label">
+                            <input type="checkbox" id="remCheck7d">
+                            <span>7 days before</span>
+                        </label>
+                        <label class="rem-check-label">
+                            <input type="checkbox" id="remCheck3d" checked>
+                            <span>3 days before</span>
+                        </label>
+                        <label class="rem-check-label">
+                            <input type="checkbox" id="remCheck24h" checked>
+                            <span>1 day (24h) before</span>
+                        </label>
+                        <label class="rem-check-label">
+                            <input type="checkbox" id="remCheck6h">
+                            <span>6 hours before</span>
+                        </label>
+                        <label class="rem-check-label">
+                            <input type="checkbox" id="remCheck1h">
+                            <span>1 hour before</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Custom Reminder Option -->
+                <div class="form-group-section">
+                    <label class="section-subheading">Custom Reminder</label>
+                    <div class="custom-rem-row">
+                        <label class="custom-toggle-wrap">
+                            <input type="checkbox" id="remCustomEnable">
+                            <span>Enable Custom Reminder:</span>
+                        </label>
+                        <input type="number" id="remCustomValue" min="1" max="90" value="2" class="form-input form-input-sm" style="width: 80px;">
+                        <select id="remCustomUnit" class="form-select form-select-sm" style="width: 110px;">
+                            <option value="hours" selected>Hours</option>
+                            <option value="days">Days</option>
+                        </select>
+                        <span class="custom-sub-txt">before deadline</span>
+                    </div>
+                </div>
+
+                <!-- Notification Channels -->
+                <div class="form-group-section">
+                    <label class="section-subheading">Notification Channels</label>
+                    <div class="channels-row">
+                        <label class="rem-check-label">
+                            <input type="checkbox" id="chanInApp" checked disabled>
+                            <span>In-App Notification Banner &amp; Bell</span>
+                        </label>
+                        <label class="rem-check-label">
+                            <input type="checkbox" id="chanBrowser" checked>
+                            <span>Browser Desktop Push Notification</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" id="demCancelBtn" class="btn btn-outlined btn-md">Cancel</button>
+                    <button type="submit" id="demSaveBtn" class="btn btn-primary btn-md btn-glow">Save Deadline &amp; Reminders</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- DEADLINE MODAL 3: REMINDER SETTINGS MODAL -->
+    <!-- ============================================================ -->
+    <div id="reminderSettingsModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+        <div class="modal-card reminder-settings-card">
+            <div class="modal-header">
+                <div class="modal-title-wrap">
+                    <i data-lucide="bell"></i>
+                    <h3>Reminder Settings</h3>
+                </div>
+                <button type="button" class="modal-close-btn" id="closeReminderSettingsModalBtn" aria-label="Close modal">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+
+            <div class="rsm-body">
+                <div class="rsm-tender-header">
+                    <h4 id="rsmTenderTitle">Procurement of DC Inverter Air Conditioners</h4>
+                    <p id="rsmDeadlineText">Submission Deadline: 17 August 2026 • 12:00 PM</p>
+                </div>
+
+                <div class="form-group-section">
+                    <label class="section-subheading">Active Reminders</label>
+                    <div class="reminders-checkbox-grid">
+                        <label class="rem-check-label">
+                            <input type="checkbox" id="rsmCheck7d">
+                            <span>7 days before</span>
+                        </label>
+                        <label class="rem-check-label">
+                            <input type="checkbox" id="rsmCheck3d" checked>
+                            <span>3 days before</span>
+                        </label>
+                        <label class="rem-check-label">
+                            <input type="checkbox" id="rsmCheck24h" checked>
+                            <span>1 day (24h) before</span>
+                        </label>
+                        <label class="rem-check-label">
+                            <input type="checkbox" id="rsmCheck6h">
+                            <span>6 hours before</span>
+                        </label>
+                        <label class="rem-check-label">
+                            <input type="checkbox" id="rsmCheck1h">
+                            <span>1 hour before</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Custom Reminder Option -->
+                <div class="form-group-section">
+                    <label class="section-subheading">Custom Reminder</label>
+                    <div class="custom-rem-row">
+                        <label class="custom-toggle-wrap">
+                            <input type="checkbox" id="rsmCustomEnable">
+                            <span>Enable Custom:</span>
+                        </label>
+                        <input type="number" id="rsmCustomValue" min="1" max="90" value="2" class="form-input form-input-sm" style="width: 80px;">
+                        <select id="rsmCustomUnit" class="form-select form-select-sm" style="width: 110px;">
+                            <option value="hours" selected>Hours</option>
+                            <option value="days">Days</option>
+                        </select>
+                        <span class="custom-sub-txt">before deadline</span>
+                    </div>
+                </div>
+
+                <div class="form-group-section">
+                    <label class="section-subheading">Notification Methods</label>
+                    <div class="channels-column">
+                        <label class="rem-check-label">
+                            <input type="checkbox" id="rsmInApp" checked disabled>
+                            <span>In-app notifications (Bell icon &amp; panel)</span>
+                        </label>
+                        <label class="rem-check-label">
+                            <input type="checkbox" id="rsmBrowser" checked>
+                            <span>Browser desktop notifications</span>
+                        </label>
+                        <button type="button" id="rsmReqPermBtn" class="btn btn-outlined btn-sm rsm-perm-btn hidden">
+                            <i data-lucide="shield-alert"></i>
+                            Grant Browser Notification Permission
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" id="rsmCancelBtn" class="btn btn-outlined btn-md">Cancel</button>
+                <button type="button" id="rsmSaveBtn" class="btn btn-primary btn-md btn-glow">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- DEADLINE MODAL 4: DELETE CONFIRMATION MODAL -->
+    <!-- ============================================================ -->
+    <div id="deleteDeadlineModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+        <div class="modal-card delete-deadline-card">
+            <div class="modal-header danger-header">
+                <div class="modal-title-wrap danger-title">
+                    <i data-lucide="alert-triangle"></i>
+                    <h3>Remove Tender Deadline?</h3>
+                </div>
+                <button type="button" class="modal-close-btn" id="closeDeleteDeadlineModalBtn" aria-label="Close modal">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+
+            <div class="del-modal-body">
+                <p>Are you sure you want to remove this tender deadline and cancel all scheduled reminders?</p>
+                <div class="del-tender-badge">
+                    <strong id="delModalTenderTitle">Tender Title</strong>
+                </div>
+                <p class="del-note"><i data-lucide="info"></i> The uploaded tender document and RAG session will remain safe in your workspace.</p>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" id="cancelDeleteDeadlineBtn" class="btn btn-outlined btn-md">Keep Deadline</button>
+                <button type="button" id="confirmDeleteDeadlineBtn" class="btn btn-danger btn-md">
+                    <i data-lucide="trash-2"></i>
+                    Yes, Remove Deadline
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- GLOBAL GLOBE BUFFERING ANIMATION OVERLAY -->
+    <div id="globalGlobeLoader" class="globe-loader-overlay hidden">
+        <div class="globe-loader-card">
+            <div class="globe-spinner-container">
+                <div class="globe-ring ring-outer"></div>
+                <div class="globe-ring ring-inner"></div>
+                <div class="globe-core-icon">
+                    <i data-lucide="globe"></i>
+                </div>
+            </div>
+            <div class="globe-loader-title" id="globeLoaderTitle">Processing Document...</div>
+            <div class="globe-loader-subtitle" id="globeLoaderSub">GLOBAL IT SOLUTIONS AI ENGINE</div>
+            <div class="globe-loader-progress-bar">
+                <div class="globe-loader-fill" id="globeLoaderFill" style="width: 0%"></div>
+            </div>
+            <div class="globe-loader-footer">
+                <span id="globeLoaderStatus">Indexing vector embeddings...</span>
+                <span id="globeLoaderPercent">0%</span>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- ============================================================ -->
+    <!-- DELETE ALL DEADLINES — Confirmation Modal                   -->
+    <!-- ============================================================ -->
+    <div id="deleteAllModal" role="dialog" aria-modal="true" aria-labelledby="delAllModalTitle">
+        <div class="del-all-modal-box">
+            <div class="del-all-modal-icon">
+                <i data-lucide="trash-2"></i>
+            </div>
+            <h3 id="delAllModalTitle">Delete All Deadlines?</h3>
+            <p>This will permanently remove <strong>all</strong> tracked tender deadlines and their reminders. This action <em>cannot</em> be undone.</p>
+            <div class="del-all-modal-actions">
+                <button type="button" class="btn-cancel" id="delAllCancelBtn">Cancel</button>
+                <button type="button" class="btn-confirm-del" id="delAllConfirmBtn">Yes, Delete All</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- COMBINER: Floating Scroll Navigator (body-level for fixed)  -->
+    <!-- ============================================================ -->
+    <div id="combinerFloatScroll" class="combiner-float-scroll hidden">
+        <button type="button" id="combinerScrollTopBtn" class="float-scroll-pill" title="Scroll to top">
+            <i data-lucide="chevrons-up"></i>
+        </button>
+        <button type="button" id="combinerScrollBottomBtn" class="float-scroll-pill" title="Scroll to bottom">
+            <i data-lucide="chevrons-down"></i>
+        </button>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+
+
+</html>
