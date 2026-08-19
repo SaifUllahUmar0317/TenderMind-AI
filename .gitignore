@@ -1,21 +1,77 @@
+﻿# =============================================================================
+# TenderMind - AI Tender Management Platform
+# .gitignore
+# =============================================================================
+
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
-.venv/
-env/
-venv/
-ENV/
+*.pyo
+*.pyd
+*.so
 
-# Application Uploads & Temp files
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+.env/
+pythonenv*/
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# Application Runtime Data - Uploaded tender documents (user data - never in repo)
 uploads/*
 !uploads/.gitkeep
+
+# Temp processing files (generated at runtime)
 temp/*
 !temp/.gitkeep
+!temp/summaries/.gitkeep
+!temp/vector_stores/.gitkeep
+!temp/thumbnails/.gitkeep
+!temp/generated_documents/.gitkeep
+!temp/deadlines/.gitkeep
 
-# IDE & OS
+# Scratch test files
+scratch/*.pdf
+scratch/*.docx
+scratch/*.jpg
+scratch/*.png
+
+# Database files (runtime SQLite)
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# IDE & Editor
 .vscode/
 .idea/
+*.suo
+*.sw?
+
+# OS Artifacts
 .DS_Store
 Thumbs.db
-*.log
+desktop.ini
+
+# Build / Distribution
+dist/
+build/
+*.egg-info/
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Node (if any frontend tooling is added)
+node_modules/
