@@ -1,12 +1,13 @@
 """
 PDF Compressor Engine powered by PyMuPDF (fitz) & Pillow (PIL).
 Intelligently analyzes PDF structure and compresses images & streams while preserving
-vector geometry, fonts, selectable text, links, and page layouts without black borders.
+vector geometry, fonts, selectable text, links, transparency, and page layouts without image loss.
 """
 
 import os
 import io
 import time
+import shutil
 import fitz  # PyMuPDF
 from PIL import Image
 from typing import Dict, Any
@@ -64,11 +65,11 @@ def analyze_pdf(pdf_path: str) -> Dict[str, Any]:
     doc.close()
     
     if total_images > 0:
-        est_reduction = "30% – 65%"
+        est_reduction = "40% – 80%"
     elif file_size > 2 * 1024 * 1024:
-        est_reduction = "15% – 35%"
+        est_reduction = "20% – 45%"
     else:
-        est_reduction = "5% – 20%"
+        est_reduction = "10% – 25%"
         
     return {
         "page_count": page_count,
@@ -83,124 +84,150 @@ def analyze_pdf(pdf_path: str) -> Dict[str, Any]:
         "est_reduction": est_reduction
     }
 
-def _process_single_image(doc, xref, smask_xref, max_dim, quality):
-    """Worker function to compress an individual PDF image xref."""
-    try:
-        # Check if already a small image or small stream
-        img_dict = doc.extract_image(xref)
-        if not img_dict:
-            return None, None
-
-        img_bytes = img_dict.get("image")
-        width = img_dict.get("width", 0)
-        height = img_dict.get("height", 0)
-        ext = img_dict.get("ext", "").lower()
-
-        # If already small JPEG and dimensions are within max_dim, skip expensive re-encoding
-        if ext in ("jpeg", "jpg") and max(width, height) <= max_dim and len(img_bytes) < 80 * 1024:
-            return None, None
-
-        # Extract pixmap from PyMuPDF
-        if smask_xref > 0:
-            try:
-                pix = fitz.Pixmap(doc, xref)
-                mask_pix = fitz.Pixmap(doc, smask_xref)
-                pix = fitz.Pixmap(pix, mask_pix)
-                png_bytes = pix.tobytes("png")
-                pil_img = Image.open(io.BytesIO(png_bytes))
-            except Exception:
-                pil_img = Image.open(io.BytesIO(img_bytes))
-        else:
-            pil_img = Image.open(io.BytesIO(img_bytes))
-
-        orig_w, orig_h = pil_img.size
-
-        # Fast Box/Bilinear downscale for large images
-        if max(orig_w, orig_h) > max_dim:
-            pil_img.thumbnail((max_dim, max_dim), Image.Resampling.BILINEAR)
-
-        # Handle alpha channel cleanly onto white background
-        if pil_img.mode in ("RGBA", "LA") or (pil_img.mode == "P" and "transparency" in pil_img.info):
-            if pil_img.mode != "RGBA":
-                pil_img = pil_img.convert("RGBA")
-            bg = Image.new("RGB", pil_img.size, (255, 255, 255))
-            bg.paste(pil_img, mask=pil_img.split()[3])
-            pil_img = bg
-        elif pil_img.mode != "RGB":
-            pil_img = pil_img.convert("RGB")
-
-        # Fast JPEG encoding with sub-sampling for maximum speed
-        buffer = io.BytesIO()
-        pil_img.save(buffer, format="JPEG", quality=quality, optimize=False, subsampling=1)
-        new_bytes = buffer.getvalue()
-
-        # Only replace if new bytes are actually smaller
-        if len(new_bytes) < len(img_bytes) * 0.95:
-            return xref, new_bytes
-
-        return None, None
-    except Exception:
-        return None, None
-
 def compress_pdf(input_path: str, output_path: str, mode: str = "recommended") -> Dict[str, Any]:
     """
-    High-performance multi-threaded PDF compression.
-    Preserves text selectability, vector drawings, links, and eliminates black borders.
+    High-performance PDF compression engine.
+    - Accurately downscales and compresses high-resolution images without loss of visibility.
+    - Synchronizes image dimensions, filter, and color spaces in PDF object dictionaries.
+    - Fully preserves transparency (SMask) and vector graphics.
+    - Provides strong, consistent size reduction across all compression modes.
     """
     start_time = time.time()
     doc = fitz.open(input_path)
     original_size = os.path.getsize(input_path)
     
-    # Configure compression parameters based on mode
+    # Configure compression parameters based on selected mode
     if mode == "maximum":
-        max_dim = 1000
+        max_dim = 900
         quality = 50
     elif mode == "balanced":
         max_dim = 1400
-        quality = 65
+        quality = 75
     elif mode == "high_quality":
-        max_dim = 2000
+        max_dim = 1800
         quality = 82
-    else:  # 'recommended'
-        max_dim = 1500
-        quality = 72
+    else:  # 'recommended' (Standard optimal mode)
+        max_dim = 1200
+        quality = 70
         
-    # Collect all unique image xrefs across document
+    # Collect all unique image xrefs and their transparency soft masks (SMask)
     unique_images = {}
+    smask_xrefs = set()
+    
     for page in doc:
-        for img_info in page.get_images(full=False):
+        for img_info in page.get_images(full=True):
             xref = img_info[0]
             smask = img_info[1] if len(img_info) > 1 else 0
+            if smask > 0:
+                smask_xrefs.add(smask)
             if xref not in unique_images:
                 unique_images[xref] = smask
 
-    # Process images with ThreadPoolExecutor for fast parallel compression on multi-core CPUs
-    from concurrent.futures import ThreadPoolExecutor
-    workers = min(8, max(2, (os.cpu_count() or 4)))
-    
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = [
-            executor.submit(_process_single_image, doc, xref, smask, max_dim, quality)
-            for xref, smask in unique_images.items()
-        ]
-        for f in futures:
-            try:
-                res_xref, new_bytes = f.result()
-                if res_xref and new_bytes:
-                    doc.update_stream(res_xref, new_bytes)
-                    doc.xref_set_key(res_xref, "SMask", "null")
-                    doc.xref_set_key(res_xref, "Mask", "null")
-                    doc.xref_set_key(res_xref, "Filter", "/DCTDecode")
-            except Exception:
-                pass
+    # Process and compress each image
+    for xref, smask in unique_images.items():
+        # SMask streams are handled in conjunction with their parent image
+        if xref in smask_xrefs:
+            continue
+            
+        try:
+            # Skip 1-bit stencil masks (monochrome text/signatures) to prevent bloat/corruption
+            is_mask = doc.xref_get_key(xref, "ImageMask")
+            if is_mask[0] == "bool" and is_mask[1] == "true":
+                continue
+                
+            img_info = doc.extract_image(xref)
+            orig_bytes_len = len(img_info.get("image", b"")) if img_info else 0
+            width = img_info.get("width", 0) if img_info else 0
+            height = img_info.get("height", 0) if img_info else 0
+            
+            # Skip tiny icons / color swatches (under 64x64 and < 4KB)
+            if width > 0 and height > 0 and width <= 64 and height <= 64 and orig_bytes_len < 4096:
+                continue
 
-    # Fast save with deflate & garbage collection
+            if smask > 0:
+                # Handle image with alpha transparency mask (SMask)
+                pix = fitz.Pixmap(doc, xref)
+                if pix.colorspace not in (fitz.csRGB, fitz.csGRAY):
+                    pix = fitz.Pixmap(fitz.csRGB, pix)
+                    
+                mask_pix = fitz.Pixmap(doc, smask)
+                rgba_pix = fitz.Pixmap(pix, mask_pix)
+                
+                pil_img = Image.open(io.BytesIO(rgba_pix.tobytes("png")))
+                if max(pil_img.width, pil_img.height) > max_dim:
+                    pil_img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+                    
+                rgb_part = pil_img.convert("RGB")
+                alpha_part = pil_img.split()[3]
+                
+                rgb_buf = io.BytesIO()
+                rgb_part.save(rgb_buf, format="JPEG", quality=quality, optimize=True)
+                new_rgb_bytes = rgb_buf.getvalue()
+                
+                alpha_buf = io.BytesIO()
+                alpha_part.save(alpha_buf, format="JPEG", quality=max(60, quality), optimize=True)
+                new_alpha_bytes = alpha_buf.getvalue()
+                
+                # Update base image stream & dictionary
+                doc.update_stream(xref, new_rgb_bytes, compress=False)
+                doc.xref_set_key(xref, "Width", str(rgb_part.width))
+                doc.xref_set_key(xref, "Height", str(rgb_part.height))
+                doc.xref_set_key(xref, "Filter", "/DCTDecode")
+                doc.xref_set_key(xref, "ColorSpace", "/DeviceRGB")
+                doc.xref_set_key(xref, "BitsPerComponent", "8")
+                doc.xref_set_key(xref, "DecodeParms", "null")
+                doc.xref_set_key(xref, "Mask", "null")
+                
+                # Update soft mask stream & dictionary
+                doc.update_stream(smask, new_alpha_bytes, compress=False)
+                doc.xref_set_key(smask, "Width", str(alpha_part.width))
+                doc.xref_set_key(smask, "Height", str(alpha_part.height))
+                doc.xref_set_key(smask, "Filter", "/DCTDecode")
+                doc.xref_set_key(smask, "ColorSpace", "/DeviceGray")
+                doc.xref_set_key(smask, "BitsPerComponent", "8")
+                doc.xref_set_key(smask, "DecodeParms", "null")
+            else:
+                # Handle standard opaque images (RGB, CMYK, Grayscale, etc.)
+                pix = fitz.Pixmap(doc, xref)
+                
+                # Convert CMYK / Indexed / ICCBased / Lab to standard color spaces
+                if pix.colorspace not in (fitz.csRGB, fitz.csGRAY):
+                    pix = fitz.Pixmap(fitz.csRGB, pix)
+                    
+                if pix.colorspace == fitz.csGRAY:
+                    pil_img = Image.open(io.BytesIO(pix.tobytes("png"))).convert("L")
+                    is_gray = True
+                else:
+                    pil_img = Image.open(io.BytesIO(pix.tobytes("png"))).convert("RGB")
+                    is_gray = False
+                    
+                orig_w, orig_h = pil_img.size
+                if max(orig_w, orig_h) > max_dim:
+                    pil_img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+                    
+                buf = io.BytesIO()
+                pil_img.save(buf, format="JPEG", quality=quality, optimize=True)
+                new_bytes = buf.getvalue()
+                
+                # Replace stream if compressed version is smaller or if image was downscaled
+                if not orig_bytes_len or len(new_bytes) < orig_bytes_len or max(orig_w, orig_h) > max_dim:
+                    doc.update_stream(xref, new_bytes, compress=False)
+                    doc.xref_set_key(xref, "Width", str(pil_img.width))
+                    doc.xref_set_key(xref, "Height", str(pil_img.height))
+                    doc.xref_set_key(xref, "Filter", "/DCTDecode")
+                    doc.xref_set_key(xref, "ColorSpace", "/DeviceGray" if is_gray else "/DeviceRGB")
+                    doc.xref_set_key(xref, "BitsPerComponent", "8")
+                    doc.xref_set_key(xref, "DecodeParms", "null")
+                    doc.xref_set_key(xref, "SMask", "null")
+                    doc.xref_set_key(xref, "Mask", "null")
+        except Exception:
+            continue
+
+    # Deflate streams and perform deep garbage collection
     doc.save(
         output_path,
-        garbage=3,
+        garbage=4,
         deflate=True,
-        deflate_images=True,
-        deflate_fonts=True,
         clean=True
     )
     doc.close()
@@ -208,9 +235,8 @@ def compress_pdf(input_path: str, output_path: str, mode: str = "recommended") -
     compressed_size = os.path.getsize(output_path)
     processing_time = round(time.time() - start_time, 2)
     
-    # If compressed size is somehow larger than original, copy original file
+    # Safety fallback: if compressed file is somehow larger than original, copy original
     if compressed_size >= original_size:
-        import shutil
         shutil.copyfile(input_path, output_path)
         compressed_size = original_size
         
