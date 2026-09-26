@@ -854,61 +854,6 @@ def download_combined_pdf(filename):
         return jsonify({"error": "Combined file not found or expired."}), 404
     return send_file(file_path, as_attachment=True, download_name=safe_name, mimetype="application/pdf")
 
-# --------------------------------------------------------------------------
-# PRODUCT FINDER API ENDPOINTS
-# --------------------------------------------------------------------------
-from product_finder.service import ProductFinderService
-product_finder_service = ProductFinderService()
-
-@app.route('/api/product-finder/tender-equipment', methods=['GET'])
-def get_tender_equipment():
-    """Fetches detected equipment and specifications from active tender document."""
-    doc_id = (request.args.get("document_id") or DocumentManager.get_active_document_id() or "").strip()
-    if not doc_id:
-        return jsonify({
-            "success": False,
-            "error": "No tender document is currently active. Please upload or select a tender document first."
-        }), 400
-
-    retriever = get_or_create_rag_retriever(doc_id)
-    result = product_finder_service.get_tender_equipment(doc_id, rag_retriever=retriever)
-    return jsonify(result)
-
-@app.route('/api/product-finder/search', methods=['POST'])
-def search_products():
-    """Searches web for matching products using Gemini Search Grounding or Free Fallback."""
-    data = request.get_json(silent=True) or {}
-    item_name = data.get("item_name", "").strip()
-    specifications = data.get("specifications", [])
-    quantity = int(data.get("quantity", 1))
-    force_refresh = bool(data.get("refresh", False))
-
-    if not item_name:
-        return jsonify({"success": False, "error": "Item name is required for product search."}), 400
-
-    if isinstance(specifications, str):
-        specifications = [s.strip() for s in specifications.split("\n") if s.strip()]
-
-    result = product_finder_service.search_for_item(
-        item_name=item_name,
-        specifications=specifications,
-        quantity=quantity,
-        force_refresh=force_refresh
-    )
-    return jsonify(result)
-
-@app.route('/api/product-finder/compare', methods=['POST'])
-def compare_products():
-    """Generates side-by-side comparison matrix for selected products."""
-    data = request.get_json(silent=True) or {}
-    required_specs = data.get("required_specs", [])
-    products = data.get("products", [])
-
-    if not products:
-        return jsonify({"success": False, "error": "At least one product is required for comparison."}), 400
-
-    result = product_finder_service.compare_products(required_specs, products)
-    return jsonify({"success": True, "comparison": result})
 
 # --------------------------------------------------------------------------
 # TENDER DEADLINE REMINDER API ENDPOINTS

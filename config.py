@@ -29,6 +29,9 @@ TEMP_FOLDER = BASE_DIR / "temp"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(TEMP_FOLDER, exist_ok=True)
 
+# Database Settings
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+
 # Application Settings
 MAX_CONTENT_LENGTH = int(os.getenv("MAX_FILE_SIZE", 50 * 1024 * 1024))  # Default 50MB for RAG uploads
 COMBINER_MAX_CONTENT_LENGTH = int(os.getenv("COMBINER_MAX_FILE_SIZE", 2 * 1024 * 1024 * 1024))  # 2GB for combiner

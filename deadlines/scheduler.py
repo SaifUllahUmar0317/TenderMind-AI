@@ -7,6 +7,8 @@ emitting in-app notifications, managing expired statuses, and preventing duplica
 import threading
 import time
 import logging
+import os
+import shutil
 from datetime import datetime, timezone
 from typing import Optional
 from deadlines.database import (
@@ -131,9 +133,9 @@ class DeadlineScheduler:
                 except Exception:
                     pass
 
-            # 2. Check for newly expired tenders that need status update and expiry notification
+            # 2. Check for newly expired tenders — auto-delete all associated data
             expired_tenders = conn.execute("""
-                SELECT id, title, submission_deadline_utc, timezone, status
+                SELECT id, title, submission_deadline_utc, timezone, status, file_name
                 FROM tenders
                 WHERE submission_deadline_utc <= ? AND status != 'DEADLINE_PASSED';
             """, (now_utc_str,)).fetchall()
@@ -141,9 +143,12 @@ class DeadlineScheduler:
             for t in expired_tenders:
                 t_id = t["id"]
                 t_title = t["title"]
+                t_file_name = t["file_name"] or ""
+
+                # Mark status expired first
                 conn.execute("UPDATE tenders SET status = 'DEADLINE_PASSED', updated_at = ? WHERE id = ?;", (now_utc_str, t_id))
 
-                # Check if expiry notification already generated
+                # Emit expiry notification before wiping data
                 exists = conn.execute("SELECT id FROM notifications WHERE tender_id = ? AND type = 'expired';", (t_id,)).fetchone()
                 if not exists:
                     conn.execute("""
@@ -152,14 +157,110 @@ class DeadlineScheduler:
                     """, (
                         f"notif_exp_{t_id}",
                         t_id,
-                        f"⚫ Submission Deadline Passed",
-                        f'The submission deadline for "{t_title}" has passed.',
+                        "⚫ Submission Deadline Passed — Files Deleted",
+                        f'The deadline for "{t_title}" has passed. All associated files and conversations have been automatically removed.',
                         now_utc_str
                     ))
                     fired_count += 1
-                    try:
-                        print(f"[DeadlineScheduler] Marked tender expired: '{t_title}'")
-                    except Exception:
-                        pass
+
+                # ----------------------------------------------------------------
+                # AUTO-CLEANUP: delete PDF file, RAG index, summaries, chat data
+                # ----------------------------------------------------------------
+                cls._cleanup_expired_tender_data(t_id, t_file_name)
+
+                try:
+                    print(f"[DeadlineScheduler] Auto-cleaned expired tender: '{t_title}' (id={t_id})")
+                except Exception:
+                    pass
 
         return fired_count
+
+    @classmethod
+    def _cleanup_expired_tender_data(cls, tender_id: str, file_name: str = ""):
+        """
+        Deletes ALL data associated with an expired tender:
+        - PDF file from uploads/ folder
+        - FAISS vector index from temp/vector_stores/
+        - BM25 keyword cache from temp/bm25_indexes/
+        - Document summary cache from temp/summaries/
+        - Reminders and notifications for this tender from SQLite DB
+        - In-memory RAG retriever (via app-level import if available)
+        """
+        import config
+
+        # 1. Delete the uploaded PDF file
+        upload_dir = config.UPLOAD_FOLDER
+        temp_dir = config.TEMP_FOLDER
+
+        # The tender_id matches the job_id which is the prefix of the saved PDF filename
+        if upload_dir and os.path.isdir(upload_dir):
+            for fname in os.listdir(upload_dir):
+                if fname.startswith(tender_id):
+                    pdf_path = os.path.join(upload_dir, fname)
+                    try:
+                        os.remove(pdf_path)
+                        print(f"[DeadlineScheduler] Deleted PDF: {fname}")
+                    except Exception as e:
+                        print(f"[DeadlineScheduler] Failed to delete PDF {fname}: {e}")
+
+        # 2. Delete FAISS vector store files
+        faiss_dir = os.path.join(temp_dir, "vector_stores")
+        for ext in [".faiss", ".json", "_chunks.json"]:
+            faiss_file = os.path.join(faiss_dir, f"{tender_id}{ext}")
+            if os.path.exists(faiss_file):
+                try:
+                    os.remove(faiss_file)
+                    print(f"[DeadlineScheduler] Deleted FAISS file: {tender_id}{ext}")
+                except Exception as e:
+                    print(f"[DeadlineScheduler] Failed to delete FAISS file: {e}")
+
+        # 3. Delete BM25 keyword index cache
+        bm25_dir = os.path.join(temp_dir, "bm25_indexes")
+        if os.path.isdir(bm25_dir):
+            for fname in os.listdir(bm25_dir):
+                if fname.startswith(tender_id):
+                    try:
+                        os.remove(os.path.join(bm25_dir, fname))
+                        print(f"[DeadlineScheduler] Deleted BM25 cache: {fname}")
+                    except Exception as e:
+                        print(f"[DeadlineScheduler] Failed to delete BM25 cache {fname}: {e}")
+
+        # 4. Delete document summary cache
+        summaries_dir = os.path.join(temp_dir, "summaries")
+        summary_file = os.path.join(summaries_dir, f"{tender_id}.json")
+        if os.path.exists(summary_file):
+            try:
+                os.remove(summary_file)
+                print(f"[DeadlineScheduler] Deleted summary cache: {tender_id}.json")
+            except Exception as e:
+                print(f"[DeadlineScheduler] Failed to delete summary cache: {e}")
+
+        # 5. Delete reminders and notifications from DB
+        try:
+            with get_db_connection() as conn:
+                conn.execute("DELETE FROM reminders WHERE tender_id = ?;", (tender_id,))
+        except Exception as e:
+            print(f"[DeadlineScheduler] Failed to clean reminders for {tender_id}: {e}")
+
+        # 6. Remove from DocumentManager registry (JSON registry)
+        try:
+            from documents.document_manager import DocumentManager
+            DocumentManager.delete_document(tender_id)
+        except Exception as e:
+            print(f"[DeadlineScheduler] Failed to remove document from registry: {e}")
+
+        # 7. Clear in-memory chat conversation
+        try:
+            from chat.conversation import ConversationMemory
+            ConversationMemory.clear_session(tender_id)
+        except Exception as e:
+            print(f"[DeadlineScheduler] Failed to clear chat session: {e}")
+
+        # 8. Remove from in-memory RAG index (imported at app level)
+        try:
+            import app as _app
+            _app.RAG_INDEXES.pop(tender_id, None)
+            _app.JOBS.pop(tender_id, None)
+        except Exception:
+            pass  # App context not available; will be cleaned on next access
+
