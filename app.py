@@ -1121,55 +1121,8 @@ def _prewarm_embedding_model():
 _prewarm_thread = threading.Thread(target=_prewarm_embedding_model, daemon=True)
 _prewarm_thread.start()
 
-# Expose demo and ASGI app for Hugging Face Spaces (Gradio SDK) compatibility
-try:
-    from a2wsgi import WSGIMiddleware
-    import gradio as gr
-
-    # Satisfy Hugging Face ZeroGPU startup check if running on ZeroGPU hardware
-    try:
-        import spaces
-        @spaces.GPU
-        def _gpu_worker(dummy):
-            return dummy
-    except Exception:
-        _gpu_worker = None
-
-    class PrefixPreservingWSGI:
-        def __init__(self, wsgi_app):
-            self.wsgi = WSGIMiddleware(wsgi_app)
-        async def __call__(self, scope, receive, send):
-            if scope.get("type") == "http" and scope.get("root_path"):
-                scope["path"] = scope["root_path"] + scope["path"]
-                scope["raw_path"] = scope["path"].encode("ascii")
-                scope["root_path"] = ""
-            await self.wsgi(scope, receive, send)
-
-    with gr.Blocks(title="TenderMind AI") as demo:
-        if _gpu_worker is not None:
-            _hf_btn = gr.Button("GPU Worker", visible=False)
-            _hf_btn.click(fn=_gpu_worker, inputs=[_hf_btn], outputs=[_hf_btn])
-
-    _wsgi = WSGIMiddleware(app)
-
-    from fastapi import Request
-    @demo.app.middleware("http")
-    async def flask_forwarder(request: Request, call_next):
-        path = request.url.path
-        # Pass Gradio internals to Gradio so ZeroGPU and healthchecks succeed
-        if path.startswith("/gradio") or path in ("/config", "/heartbeat", "/queue/join", "/info") or path.startswith("/assets") or path.startswith("/theme.css"):
-            return await call_next(request)
-        # All web UI (/) and API (/api/*) and static (/static/*) are served directly by Flask
-        return await _wsgi(request.scope, request.receive, request.send)
-except Exception as _e:
-    demo = None
-
 if __name__ == '__main__':
-    port = int(os.getenv("PORT", 7860 if os.getenv("SPACE_ID") else config.PORT))
+    port = int(os.getenv("PORT", 7860))
     host = os.getenv("HOST", "0.0.0.0")
     print(f"Starting TenderMind AI server on http://{host}:{port}")
-
-    if demo is not None and (os.getenv("SPACE_ID") or os.getenv("USE_GRADIO")):
-        demo.queue().launch(server_name=host, server_port=port, show_error=True)
-    else:
-        app.run(host=host, port=port, debug=config.DEBUG, use_reloader=False)
+    app.run(host=host, port=port, debug=config.DEBUG, use_reloader=False)
