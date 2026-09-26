@@ -1119,6 +1119,28 @@ def _prewarm_embedding_model():
 _prewarm_thread = threading.Thread(target=_prewarm_embedding_model, daemon=True)
 _prewarm_thread.start()
 
+# Expose demo and ASGI app for Hugging Face Spaces (Gradio SDK) compatibility
+try:
+    from a2wsgi import WSGIMiddleware
+    from fastapi import FastAPI
+    import gradio as gr
+
+    fastapi_app = FastAPI()
+    fastapi_app.mount("/", WSGIMiddleware(app))
+
+    with gr.Blocks(title="TenderMind AI") as demo:
+        gr.HTML('<iframe src="/" style="position:fixed; top:0; left:0; bottom:0; right:0; width:100%; height:100%; border:none; margin:0; padding:0; overflow:hidden; z-index:999999;"></iframe>')
+except Exception as _e:
+    demo = None
+    fastapi_app = None
+
 if __name__ == '__main__':
-    print(f"Starting TenderMind AI server on http://{config.HOST}:{config.PORT}")
-    app.run(host=config.HOST, port=config.PORT, debug=config.DEBUG, use_reloader=False)
+    port = int(os.getenv("PORT", 7860 if os.getenv("SPACE_ID") else config.PORT))
+    host = os.getenv("HOST", "0.0.0.0")
+    print(f"Starting TenderMind AI server on http://{host}:{port}")
+
+    if fastapi_app is not None and (os.getenv("SPACE_ID") or os.getenv("USE_UVICORN")):
+        import uvicorn
+        uvicorn.run(fastapi_app, host=host, port=port)
+    else:
+        app.run(host=host, port=port, debug=config.DEBUG, use_reloader=False)
