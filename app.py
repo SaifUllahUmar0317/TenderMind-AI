@@ -1145,21 +1145,22 @@ try:
                 scope["root_path"] = ""
             await self.wsgi(scope, receive, send)
 
-    with gr.Blocks(title="TenderMind AI", css="""
-        body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; }
-        .gradio-container { max-width:100% !important; margin:0 !important; padding:0 !important; height:100vh !important; }
-        footer { display:none !important; }
-    """) as demo:
-        gr.HTML('<iframe src="/flask/" style="position:fixed; top:0; left:0; width:100%; height:100%; border:none; margin:0; padding:0; overflow:hidden; z-index:999999;"></iframe>')
+    with gr.Blocks(title="TenderMind AI") as demo:
         if _gpu_worker is not None:
             _hf_btn = gr.Button("GPU Worker", visible=False)
             _hf_btn.click(fn=_gpu_worker, inputs=[_hf_btn], outputs=[_hf_btn])
 
-    # Mount Flask handler on demo.app with prefix restoration
-    _handler = PrefixPreservingWSGI(app)
-    demo.app.mount("/flask", _handler)
-    demo.app.mount("/api", _handler)
-    demo.app.mount("/static", _handler)
+    _wsgi = WSGIMiddleware(app)
+
+    from fastapi import Request
+    @demo.app.middleware("http")
+    async def flask_forwarder(request: Request, call_next):
+        path = request.url.path
+        # Pass Gradio internals to Gradio so ZeroGPU and healthchecks succeed
+        if path.startswith("/gradio") or path in ("/config", "/heartbeat", "/queue/join", "/info") or path.startswith("/assets") or path.startswith("/theme.css"):
+            return await call_next(request)
+        # All web UI (/) and API (/api/*) and static (/static/*) are served directly by Flask
+        return await _wsgi(request.scope, request.receive, request.send)
 except Exception as _e:
     demo = None
 
