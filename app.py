@@ -1145,11 +1145,16 @@ try:
             _hf_btn = gr.Button("GPU Worker", visible=False)
             _hf_btn.click(fn=_gpu_worker, inputs=[_hf_btn], outputs=[_hf_btn])
 
-    # Mount Flask app and its API / static paths directly onto Gradio's FastAPI engine
+    # Forward Flask routes directly to Flask preserving full paths
     _wsgi = WSGIMiddleware(app)
-    demo.app.mount("/flask", _wsgi)
-    demo.app.mount("/api", _wsgi)
-    demo.app.mount("/static", _wsgi)
+
+    from fastapi import Request
+    @demo.app.middleware("http")
+    async def flask_routing_middleware(request: Request, call_next):
+        path = request.url.path
+        if path.startswith("/api") or path.startswith("/static") or path in ("/flask", "/flask/"):
+            return await _wsgi(request.scope, request.receive, request.send)
+        return await call_next(request)
 except Exception as _e:
     demo = None
 
