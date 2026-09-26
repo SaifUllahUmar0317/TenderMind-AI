@@ -1,0 +1,16 @@
+﻿.git
+.gitignore
+.env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+temp/*
+!temp/.gitkeep
+uploads/*
+!uploads/.gitkeep
+cloudflared.exe
+*.exe
+tests/
+scratch/

@@ -1,3 +1,13 @@
+---
+title: TenderMind AI
+emoji: 📑
+colorFrom: indigo
+colorTo: blue
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # TenderMind — AI Tender Management & Document Intelligence Platform
 
 > A professional, production-grade web application for AI-powered tender document analysis, intelligent Q&A, equipment extraction, PDF tools, and automated deadline management.
