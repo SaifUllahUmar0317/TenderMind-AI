@@ -1124,7 +1124,6 @@ _prewarm_thread.start()
 # Expose demo and ASGI app for Hugging Face Spaces (Gradio SDK) compatibility
 try:
     from a2wsgi import WSGIMiddleware
-    from fastapi import FastAPI
     import gradio as gr
 
     # Satisfy Hugging Face ZeroGPU startup check if running on ZeroGPU hardware
@@ -1136,29 +1135,40 @@ try:
     except Exception:
         _gpu_worker = None
 
-    with gr.Blocks(title="TenderMind AI") as demo:
-        gr.HTML('<meta http-equiv="refresh" content="0; url=/">')
+    class PrefixPreservingWSGI:
+        def __init__(self, wsgi_app):
+            self.wsgi = WSGIMiddleware(wsgi_app)
+        async def __call__(self, scope, receive, send):
+            if scope.get("type") == "http" and scope.get("root_path"):
+                scope["path"] = scope["root_path"] + scope["path"]
+                scope["raw_path"] = scope["path"].encode("ascii")
+                scope["root_path"] = ""
+            await self.wsgi(scope, receive, send)
+
+    with gr.Blocks(title="TenderMind AI", css="""
+        body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; }
+        .gradio-container { max-width:100% !important; margin:0 !important; padding:0 !important; height:100vh !important; }
+        footer { display:none !important; }
+    """) as demo:
+        gr.HTML('<iframe src="/flask/" style="position:fixed; top:0; left:0; width:100%; height:100%; border:none; margin:0; padding:0; overflow:hidden; z-index:999999;"></iframe>')
         if _gpu_worker is not None:
             _hf_btn = gr.Button("GPU Worker", visible=False)
             _hf_btn.click(fn=_gpu_worker, inputs=[_hf_btn], outputs=[_hf_btn])
 
-    # Mount Gradio onto FastAPI at /gradio, and Flask WSGI app onto root /
-    fastapi_app = FastAPI()
-    fastapi_app = gr.mount_gradio_app(fastapi_app, demo, path="/gradio")
-
-    _wsgi = WSGIMiddleware(app)
-    fastapi_app.mount("/", _wsgi)
+    # Mount Flask handler on demo.app with prefix restoration
+    _handler = PrefixPreservingWSGI(app)
+    demo.app.mount("/flask", _handler)
+    demo.app.mount("/api", _handler)
+    demo.app.mount("/static", _handler)
 except Exception as _e:
     demo = None
-    fastapi_app = None
 
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 7860 if os.getenv("SPACE_ID") else config.PORT))
     host = os.getenv("HOST", "0.0.0.0")
     print(f"Starting TenderMind AI server on http://{host}:{port}")
 
-    if fastapi_app is not None and (os.getenv("SPACE_ID") or os.getenv("USE_GRADIO")):
-        import uvicorn
-        uvicorn.run(fastapi_app, host=host, port=port)
+    if demo is not None and (os.getenv("SPACE_ID") or os.getenv("USE_GRADIO")):
+        demo.queue().launch(server_name=host, server_port=port, show_error=True)
     else:
         app.run(host=host, port=port, debug=config.DEBUG, use_reloader=False)
