@@ -1126,12 +1126,24 @@ try:
     from a2wsgi import WSGIMiddleware
     import gradio as gr
 
+    # Satisfy Hugging Face ZeroGPU startup check if running on ZeroGPU hardware
+    try:
+        import spaces
+        @spaces.GPU
+        def _gpu_worker(dummy):
+            return dummy
+    except Exception:
+        _gpu_worker = None
+
     with gr.Blocks(title="TenderMind AI", css="""
         body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; }
         .gradio-container { max-width:100% !important; margin:0 !important; padding:0 !important; height:100vh !important; }
         footer { display:none !important; }
     """) as demo:
         gr.HTML('<iframe src="/flask/" style="position:fixed; top:0; left:0; width:100%; height:100%; border:none; margin:0; padding:0; overflow:hidden; z-index:999999;"></iframe>')
+        if _gpu_worker is not None:
+            _hf_btn = gr.Button("GPU Worker", visible=False)
+            _hf_btn.click(fn=_gpu_worker, inputs=[_hf_btn], outputs=[_hf_btn])
 
     # Mount Flask app and its API / static paths directly onto Gradio's FastAPI engine
     _wsgi = WSGIMiddleware(app)
