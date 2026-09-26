@@ -1,4 +1,4 @@
-﻿-- =============================================================================
+-- =============================================================================
 -- TenderMind AI — Neon PostgreSQL Database Schema
 -- Matches all application screens & modules:
 -- 1. Tender Assistant (Documents, Summaries, Equipment/BOQ, RAG Chat)
