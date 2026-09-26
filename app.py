@@ -197,6 +197,8 @@ def allowed_file(filename):
 # ROUTES
 # ------------------------------------------------------------------------------
 @app.route('/')
+@app.route('/flask')
+@app.route('/flask/')
 def index():
     return render_template('index.html', languages=config.SUPPORTED_LANGUAGES)
 
@@ -1122,25 +1124,29 @@ _prewarm_thread.start()
 # Expose demo and ASGI app for Hugging Face Spaces (Gradio SDK) compatibility
 try:
     from a2wsgi import WSGIMiddleware
-    from fastapi import FastAPI
     import gradio as gr
 
-    fastapi_app = FastAPI()
-    fastapi_app.mount("/", WSGIMiddleware(app))
+    with gr.Blocks(title="TenderMind AI", css="""
+        body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; }
+        .gradio-container { max-width:100% !important; margin:0 !important; padding:0 !important; height:100vh !important; }
+        footer { display:none !important; }
+    """) as demo:
+        gr.HTML('<iframe src="/flask/" style="position:fixed; top:0; left:0; width:100%; height:100%; border:none; margin:0; padding:0; overflow:hidden; z-index:999999;"></iframe>')
 
-    with gr.Blocks(title="TenderMind AI") as demo:
-        gr.HTML('<iframe src="/" style="position:fixed; top:0; left:0; bottom:0; right:0; width:100%; height:100%; border:none; margin:0; padding:0; overflow:hidden; z-index:999999;"></iframe>')
+    # Mount Flask app and its API / static paths directly onto Gradio's FastAPI engine
+    _wsgi = WSGIMiddleware(app)
+    demo.app.mount("/flask", _wsgi)
+    demo.app.mount("/api", _wsgi)
+    demo.app.mount("/static", _wsgi)
 except Exception as _e:
     demo = None
-    fastapi_app = None
 
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 7860 if os.getenv("SPACE_ID") else config.PORT))
     host = os.getenv("HOST", "0.0.0.0")
     print(f"Starting TenderMind AI server on http://{host}:{port}")
 
-    if fastapi_app is not None and (os.getenv("SPACE_ID") or os.getenv("USE_UVICORN")):
-        import uvicorn
-        uvicorn.run(fastapi_app, host=host, port=port)
+    if demo is not None and (os.getenv("SPACE_ID") or os.getenv("USE_GRADIO")):
+        demo.queue().launch(server_name=host, server_port=port, show_error=True)
     else:
         app.run(host=host, port=port, debug=config.DEBUG, use_reloader=False)
