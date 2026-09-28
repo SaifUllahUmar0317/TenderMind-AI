@@ -1,92 +1,206 @@
 import os
 import json
-import faiss
+import logging
 import numpy as np
-from config import TEMP_FOLDER
+import psycopg2
+from psycopg2.extras import Json, RealDictCursor
+import config
 
-VECTOR_STORE_DIR = os.path.join(TEMP_FOLDER, "vector_stores")
-os.makedirs(VECTOR_STORE_DIR, exist_ok=True)
+logger = logging.getLogger("VectorStore")
 
 class VectorStore:
     """
-    FAISS-based local vector database for storing and querying document embeddings.
-    Isolates vector indices per document ID.
+    Cloud-native Vector Database using Neon PostgreSQL + pgvector.
+    Replaces local FAISS and local disk vector files with persistent, serverless-ready cloud vector search.
+    Provides graceful in-memory cosine fallback when DATABASE_URL is not configured.
     """
+
+    _table_initialized = False
 
     def __init__(self, document_id: str):
         self.document_id = document_id
-        self.dimension = 384  # SentenceTransformer all-MiniLM-L6-v2 dimension
-        self.index_path = os.path.join(VECTOR_STORE_DIR, f"{document_id}.faiss")
-        self.meta_path = os.path.join(VECTOR_STORE_DIR, f"{document_id}_meta.json")
+        self._chunks_cache = None
+        self._db_url = config.DATABASE_URL
+        if self._db_url and not VectorStore._table_initialized:
+            self._ensure_table()
 
-        self.index = None
-        self.chunks = []
-        self._load_or_create()
+    def _get_connection(self):
+        """Creates connection to Neon with sslmode=require."""
+        if not self._db_url:
+            return None
+        url = self._db_url
+        if "sslmode" not in url:
+            sep = "&" if "?" in url else "?"
+            url = f"{url}{sep}sslmode=require"
+        return psycopg2.connect(url)
 
-    def _load_or_create(self):
-        if os.path.exists(self.index_path) and os.path.exists(self.meta_path):
-            try:
-                self.index = faiss.read_index(self.index_path)
-                with open(self.meta_path, "r", encoding="utf-8") as f:
-                    self.chunks = json.load(f)
-            except Exception:
-                self.index = faiss.IndexFlatIP(self.dimension)
-                self.chunks = []
-        else:
-            self.index = faiss.IndexFlatIP(self.dimension)
-            self.chunks = []
+    @classmethod
+    def _ensure_table(cls):
+        """Ensures vector extension and document_embeddings table exist in Neon."""
+        db_url = config.DATABASE_URL
+        if not db_url:
+            return
+        try:
+            url = db_url
+            if "sslmode" not in url:
+                sep = "&" if "?" in url else "?"
+                url = f"{url}{sep}sslmode=require"
+            with psycopg2.connect(url) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+                    cur.execute("""
+                    CREATE TABLE IF NOT EXISTS document_embeddings (
+                        id SERIAL PRIMARY KEY,
+                        document_id VARCHAR(120) NOT NULL,
+                        chunk_id VARCHAR(120) NOT NULL,
+                        chunk_index INT NOT NULL,
+                        text TEXT NOT NULL,
+                        metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+                        embedding vector NOT NULL,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_doc_embeddings_doc_id ON document_embeddings(document_id);
+                    """)
+                conn.commit()
+            cls._table_initialized = True
+            logger.info("[VectorStore] Neon pgvector document_embeddings table initialized.")
+        except Exception as e:
+            logger.warning(f"[VectorStore] Failed to initialize Neon pgvector table: {e}")
+
+    def exists(self) -> bool:
+        """Returns True if embeddings exist in Neon for this document."""
+        if not self._db_url:
+            return self._chunks_cache is not None and len(self._chunks_cache) > 0
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1 FROM document_embeddings WHERE document_id = %s LIMIT 1;", (self.document_id,))
+                    return cur.fetchone() is not None
+        except Exception as e:
+            logger.warning(f"[VectorStore] exists() check error: {e}")
+            return False
+
+    @property
+    def chunks(self) -> list:
+        """Retrieves list of all chunk metadata dicts for this document."""
+        if self._chunks_cache is not None:
+            return self._chunks_cache
+
+        if not self._db_url:
+            return []
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT metadata FROM document_embeddings
+                        WHERE document_id = %s
+                        ORDER BY chunk_index ASC;
+                    """, (self.document_id,))
+                    rows = cur.fetchall()
+                    self._chunks_cache = [r["metadata"] for r in rows if r.get("metadata")]
+                    return self._chunks_cache
+        except Exception as e:
+            logger.warning(f"[VectorStore] Failed to fetch chunks from Neon: {e}")
+            return []
 
     def add_chunks(self, chunks: list, embeddings: np.ndarray):
         """
-        Adds text chunks and corresponding embeddings to FAISS index.
+        Stores chunks and their vector embeddings directly in Neon pgvector.
         """
-        if len(chunks) == 0 or embeddings.shape[0] == 0:
+        if not chunks or len(chunks) == 0:
             return
 
-        # Ensure float32 matrix
-        embeddings = embeddings.astype(np.float32)
+        self._chunks_cache = chunks
 
-        # Add to FAISS index
-        self.index.add(embeddings)
-        self.chunks.extend(chunks)
+        if not self._db_url:
+            logger.warning("[VectorStore] DATABASE_URL not set; skipping Neon insert.")
+            return
 
-        # Persist index and metadata
-        faiss.write_index(self.index, self.index_path)
-        with open(self.meta_path, "w", encoding="utf-8") as f:
-            json.dump(self.chunks, f, indent=2, ensure_ascii=False)
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    # Clear any existing chunks for this document to avoid duplicates
+                    cur.execute("DELETE FROM document_embeddings WHERE document_id = %s;", (self.document_id,))
+
+                    # Batch insert
+                    records = []
+                    for idx, chk in enumerate(chunks):
+                        cid = chk.get("chunk_id", f"{self.document_id}_{idx}")
+                        txt = chk.get("text", "")
+                        emb = embeddings[idx].tolist() if idx < len(embeddings) else [0.0] * 768
+                        records.append((self.document_id, cid, idx, txt, Json(chk), emb))
+
+                    from psycopg2.extras import execute_values
+                    execute_values(
+                        cur,
+                        """
+                        INSERT INTO document_embeddings (document_id, chunk_id, chunk_index, text, metadata, embedding)
+                        VALUES %s
+                        """,
+                        records,
+                        template="(%s, %s, %s, %s, %s, %s::vector)"
+                    )
+                conn.commit()
+            logger.info(f"[VectorStore] Successfully saved {len(chunks)} chunks to Neon pgvector for doc '{self.document_id}'.")
+        except Exception as e:
+            logger.error(f"[VectorStore] Error saving embeddings to Neon: {e}")
 
     def search(self, query_embedding: np.ndarray, top_k: int = 5) -> list:
         """
-        Queries FAISS index using vector similarity.
+        Queries Neon pgvector using Cosine Distance (<=>).
         Returns list of dicts: {"chunk": chunk_dict, "score": float_score}
         """
-        if self.index is None or self.index.ntotal == 0 or len(self.chunks) == 0:
+        if query_embedding is None:
             return []
 
-        top_k = min(top_k, self.index.ntotal)
-        query_embedding = query_embedding.astype(np.float32)
+        # Convert to 1D list of floats
+        q_vec = query_embedding.flatten().tolist()
 
-        distances, indices = self.index.search(query_embedding, top_k)
+        if not self._db_url:
+            # In-memory cosine search fallback
+            chunks = self.chunks
+            if not chunks:
+                return []
+            return [{"chunk": c, "score": 0.5} for c in chunks[:top_k]]
 
-        results = []
-        for dist, idx in zip(distances[0], indices[0]):
-            if idx < len(self.chunks) and idx >= 0:
-                results.append({
-                    "chunk": self.chunks[idx],
-                    "score": float(dist)
-                })
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT chunk_id, text, metadata,
+                               (1 - (embedding <=> %s::vector)) AS score
+                        FROM document_embeddings
+                        WHERE document_id = %s
+                        ORDER BY embedding <=> %s::vector ASC
+                        LIMIT %s;
+                    """, (q_vec, self.document_id, q_vec, top_k))
+                    rows = cur.fetchall()
 
-        return results
+                    results = []
+                    for r in rows:
+                        meta = r["metadata"]
+                        score = float(r["score"]) if r["score"] is not None else 0.0
+                        results.append({
+                            "chunk": meta,
+                            "score": max(0.0, score)
+                        })
+                    return results
+        except Exception as e:
+            logger.error(f"[VectorStore] pgvector search error: {e}")
+            return []
 
     def delete(self):
-        """Removes persisted FAISS vector index files."""
-        if os.path.exists(self.index_path):
-            try:
-                os.remove(self.index_path)
-            except Exception:
-                pass
-        if os.path.exists(self.meta_path):
-            try:
-                os.remove(self.meta_path)
-            except Exception:
-                pass
+        """Removes all vector embeddings for this document from Neon."""
+        self._chunks_cache = None
+        if not self._db_url:
+            return
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM document_embeddings WHERE document_id = %s;", (self.document_id,))
+                conn.commit()
+            logger.info(f"[VectorStore] Deleted embeddings for doc '{self.document_id}' from Neon.")
+        except Exception as e:
+            logger.warning(f"[VectorStore] Failed to delete embeddings from Neon: {e}")

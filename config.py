@@ -21,9 +21,13 @@ os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 
-# Upload & Temp folders
-UPLOAD_FOLDER = BASE_DIR / "uploads"
-TEMP_FOLDER = BASE_DIR / "temp"
+# Upload & Temp folders (use writable /tmp directory on Vercel serverless)
+if os.getenv("VERCEL"):
+    UPLOAD_FOLDER = Path("/tmp/uploads")
+    TEMP_FOLDER = Path("/tmp/temp")
+else:
+    UPLOAD_FOLDER = BASE_DIR / "uploads"
+    TEMP_FOLDER = BASE_DIR / "temp"
 
 # Ensure directories exist
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)

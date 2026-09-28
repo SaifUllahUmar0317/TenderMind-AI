@@ -203,16 +203,22 @@ class DeadlineScheduler:
                     except Exception as e:
                         print(f"[DeadlineScheduler] Failed to delete PDF {fname}: {e}")
 
-        # 2. Delete FAISS vector store files
+        # 2. Delete vector store embeddings (Neon pgvector and local files)
+        try:
+            from rag.vector_store import VectorStore
+            VectorStore(tender_id).delete()
+        except Exception as e:
+            print(f"[DeadlineScheduler] Failed to delete embeddings for {tender_id}: {e}")
+
         faiss_dir = os.path.join(temp_dir, "vector_stores")
-        for ext in [".faiss", ".json", "_chunks.json"]:
-            faiss_file = os.path.join(faiss_dir, f"{tender_id}{ext}")
-            if os.path.exists(faiss_file):
-                try:
-                    os.remove(faiss_file)
-                    print(f"[DeadlineScheduler] Deleted FAISS file: {tender_id}{ext}")
-                except Exception as e:
-                    print(f"[DeadlineScheduler] Failed to delete FAISS file: {e}")
+        if os.path.isdir(faiss_dir):
+            for ext in [".faiss", ".json", "_chunks.json"]:
+                faiss_file = os.path.join(faiss_dir, f"{tender_id}{ext}")
+                if os.path.exists(faiss_file):
+                    try:
+                        os.remove(faiss_file)
+                    except Exception:
+                        pass
 
         # 3. Delete BM25 keyword index cache
         bm25_dir = os.path.join(temp_dir, "bm25_indexes")

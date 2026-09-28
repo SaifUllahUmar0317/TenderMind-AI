@@ -126,7 +126,7 @@ def run_pdf_extraction_pipeline(job_id: str, pdf_path: str, filename: str, file_
         embeddings = EmbeddingGenerator.embed_texts(chunk_texts)
 
         # Step 4: Vector Store & BM25 Index
-        update_job_status(job_id, "processing", 92, "Building FAISS vector index & BM25 store...")
+        update_job_status(job_id, "processing", 92, "Indexing vector embeddings in Neon pgvector...")
         vstore = VectorStore(job_id)
         vstore.add_chunks(chunks, embeddings)
 
@@ -375,12 +375,13 @@ def chat_with_document():
     if not doc_id:
         return jsonify({"success": False, "error": "No active tender document is selected. Please select a document first."}), 400
 
-    # Validate that document exists in registry, in-memory JOBS, or has a persisted FAISS vector index
+    # Validate that document exists in registry, in-memory JOBS, or has persisted pgvector embeddings
     reg = DocumentManager._load_registry()
+    vstore = VectorStore(doc_id)
     doc_exists = (
         doc_id in reg.get("documents", {}) or
         doc_id in JOBS or
-        os.path.exists(os.path.join(config.TEMP_FOLDER, "vector_stores", f"{doc_id}.faiss"))
+        vstore.exists()
     )
     if not doc_exists:
         return jsonify({
@@ -528,10 +529,11 @@ def select_document():
         return jsonify({"success": False, "error": "Document ID is required."}), 400
 
     reg = DocumentManager._load_registry()
+    vstore = VectorStore(doc_id)
     doc_exists = (
         doc_id in reg.get("documents", {}) or
         doc_id in JOBS or
-        os.path.exists(os.path.join(config.TEMP_FOLDER, "vector_stores", f"{doc_id}.faiss"))
+        vstore.exists()
     )
     if not doc_exists:
         return jsonify({"success": False, "error": f"Document '{doc_id}' not found."}), 404
@@ -1107,19 +1109,12 @@ def poll_notifications():
 def file_too_large(e):
     return jsonify({"success": False, "error": "File size exceeds the maximum limit."}), 413
 
-# Start the background reminder scheduler
-DeadlineScheduler.start(check_interval=20)
-
-# Pre-warm the embedding model in background so first upload is instant
-def _prewarm_embedding_model():
+# Start the background reminder scheduler on long-running environments
+if not os.getenv("VERCEL"):
     try:
-        EmbeddingGenerator.get_model()
-        print("[Startup] Embedding model pre-warmed and ready.")
-    except Exception as e:
-        print(f"[Startup] Embedding pre-warm skipped: {e}")
-
-_prewarm_thread = threading.Thread(target=_prewarm_embedding_model, daemon=True)
-_prewarm_thread.start()
+        DeadlineScheduler.start(check_interval=20)
+    except Exception as _e:
+        pass
 
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 7860))

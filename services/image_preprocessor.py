@@ -1,5 +1,8 @@
 import fitz  # PyMuPDF
-import cv2
+try:
+    import cv2
+except ImportError:
+    cv2 = None
 import numpy as np
 from PIL import Image
 import io
