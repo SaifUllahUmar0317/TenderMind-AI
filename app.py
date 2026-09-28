@@ -39,7 +39,13 @@ from deadlines.database import DeadlineDB, TimezoneHelper, DEFAULT_TIMEZONE
 from deadlines.extractor import DeadlineExtractor
 from deadlines.scheduler import DeadlineScheduler
 
-app = Flask(__name__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app = Flask(
+    __name__,
+    template_folder=os.path.join(BASE_DIR, "templates"),
+    static_folder=os.path.join(BASE_DIR, "static"),
+    static_url_path="/static"
+)
 app.config.from_object(config)
 app.config['MAX_CONTENT_LENGTH'] = config.COMBINER_MAX_CONTENT_LENGTH
 
