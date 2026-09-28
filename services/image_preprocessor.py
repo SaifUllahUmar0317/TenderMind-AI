@@ -26,14 +26,17 @@ class ImagePreprocessor:
             
             # Convert pixmap bytes to PIL Image, then to numpy array (RGB to BGR)
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            numpy_img = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-            return numpy_img
+            if cv2 is not None:
+                return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+            return np.array(img)
 
     @staticmethod
     def deskew_image(image: np.ndarray) -> np.ndarray:
         """
         Detects text skew angle and rotates the image to align horizontally.
         """
+        if cv2 is None:
+            return image
         try:
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
             # Invert colors so text is white on black background
@@ -71,6 +74,9 @@ class ImagePreprocessor:
         4. Noise Reduction
         5. Otsu Thresholding / Binarization
         """
+        if cv2 is None:
+            return image
+
         if len(image.shape) == 3:
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         else:
