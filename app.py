@@ -1123,7 +1123,7 @@ if not os.getenv("VERCEL"):
         pass
 
 if __name__ == '__main__':
-    port = int(os.getenv("PORT", 7860))
+    port = int(os.getenv("PORT", 7860)) if os.getenv("PORT", "").strip().isdigit() else 7860
     host = os.getenv("HOST", "0.0.0.0")
     print(f"Starting TenderMind AI server on http://{host}:{port}")
     app.run(host=host, port=port, debug=config.DEBUG, use_reloader=False)

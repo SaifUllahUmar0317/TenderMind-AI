@@ -33,22 +33,31 @@ else:
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(TEMP_FOLDER, exist_ok=True)
 
+def _safe_int_env(key: str, default: int) -> int:
+    val = os.getenv(key, "")
+    if val is None or not str(val).strip():
+        return default
+    try:
+        return int(str(val).strip())
+    except (ValueError, TypeError):
+        return default
+
 # Database Settings
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
 # Application Settings
-MAX_CONTENT_LENGTH = int(os.getenv("MAX_FILE_SIZE", 50 * 1024 * 1024))  # Default 50MB for RAG uploads
-COMBINER_MAX_CONTENT_LENGTH = int(os.getenv("COMBINER_MAX_FILE_SIZE", 2 * 1024 * 1024 * 1024))  # 2GB for combiner
+MAX_CONTENT_LENGTH = _safe_int_env("MAX_FILE_SIZE", 50 * 1024 * 1024)  # Default 50MB for RAG uploads
+COMBINER_MAX_CONTENT_LENGTH = _safe_int_env("COMBINER_MAX_FILE_SIZE", 2 * 1024 * 1024 * 1024)  # 2GB for combiner
 ALLOWED_EXTENSIONS = {"pdf"}
 
 # Server Settings
-HOST = os.getenv("HOST", "0.0.0.0")
-PORT = int(os.getenv("PORT", 5000))
-DEBUG = os.getenv("FLASK_ENV", "development") == "development"
+HOST = os.getenv("HOST", "0.0.0.0").strip() or "0.0.0.0"
+PORT = _safe_int_env("PORT", 5000)
+DEBUG = (os.getenv("FLASK_ENV", "production").strip() or "production") == "development"
 
 # OCR & PDF Extraction Settings
-DEFAULT_DPI = int(os.getenv("OCR_DPI", 300))
-DEFAULT_OCR_LANG = os.getenv("OCR_LANG", "eng")
+DEFAULT_DPI = _safe_int_env("OCR_DPI", 300)
+DEFAULT_OCR_LANG = os.getenv("OCR_LANG", "eng").strip() or "eng"
 
 # Detect Tesseract Path on Windows if not set in environment
 TESSERACT_CMD = os.getenv("TESSERACT_CMD")
